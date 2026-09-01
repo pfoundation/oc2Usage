@@ -1,0 +1,63 @@
+{
+  "name": "@pfoundation/opencode-providers-usage",
+  "version": "0.1.0",
+  "description": "OpenCode plugin that shows provider usage limits (Claude, Grok, OpenCode Go) in the TUI footer and a /usage dialog",
+  "type": "module",
+  "license": "MIT",
+  "author": "P Foundation",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pfoundation/opencode-providers-usage.git"
+  },
+  "homepage": "https://github.com/pfoundation/opencode-providers-usage#readme",
+  "bugs": {
+    "url": "https://github.com/pfoundation/opencode-providers-usage/issues"
+  },
+  "keywords": [
+    "opencode",
+    "opencode-plugin",
+    "usage",
+    "rate-limit",
+    "quota",
+    "anthropic",
+    "claude",
+    "grok",
+    "xai",
+    "opencode-go"
+  ],
+  "exports": {
+    ".": "./src/index.ts",
+    "./tui": "./src/tui.tsx",
+    "./rpc": "./src/rpc.ts"
+  },
+  "files": [
+    "src",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "pack:check": "npm pack --dry-run"
+  },
+  "dependencies": {
+    "@opencode-ai/plugin": "beta"
+  },
+  "peerDependencies": {
+    "@opentui/core": ">=0.5.8",
+    "@opentui/solid": ">=0.5.8",
+    "solid-js": ">=1.9.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "prettier": "^3",
+    "typescript": "~5.9.3"
+  }
+}
