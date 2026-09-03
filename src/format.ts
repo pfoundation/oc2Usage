@@ -29,6 +29,7 @@ export type Snapshot = {
   grok: ProviderInfo;
   go: ProviderInfo;
   anthropic: ProviderInfo;
+  meta: ProviderInfo;
 };
 
 export type WindowRow = {
@@ -62,14 +63,23 @@ export const CLAUDE_WINDOW_LABELS: WindowLabels = {
   monthly: "extra",
 };
 
+export const META_WINDOW_LABELS: WindowLabels = {
+  rolling: "5h",
+  weekly: "week",
+  monthly: "month",
+};
+
 export const MIN_FETCH_INTERVAL_MS = 180_000;
-export const FOOTER_MIN_PERCENT = 0;
-export const PIE_CHARS = ["○", "◔", "◑", "◕", "●"] as const;
+export const HOURLY_BLOCK_MIN_PERCENT = 75;
+export const WEEKLY_BLOCK_MIN_PERCENT = 50;
+export const LOW_USAGE_DIM_PERCENT = 30;
+export const BLOCK_CHARS = ["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"] as const;
 
 export type FooterPie = {
   label: string;
   glyph: string;
   percent: number;
+  durationMs: number;
 };
 
 export type FooterView = {
@@ -77,6 +87,7 @@ export type FooterView = {
   percents: string;
   pies: FooterPie[];
   failed: boolean;
+  maxPercent?: number;
 };
 
 const HOUR_MS = 3_600_000;
@@ -86,6 +97,7 @@ const FOOTER_KIND = {
   grok: { name: "grok", labels: GROK_WINDOW_LABELS },
   go: { name: "go", labels: GO_WINDOW_LABELS },
   anthropic: { name: "claude", labels: CLAUDE_WINDOW_LABELS },
+  meta: { name: "meta", labels: META_WINDOW_LABELS },
 } as const;
 
 export function canFetch(
@@ -105,6 +117,30 @@ function scopedPercents(provider: ProviderInfo): number[] {
   if (typeof provider.fable?.percent === "number")
     return [provider.fable.percent];
   return [];
+}
+
+export function isFableModel(modelID?: string): boolean {
+  return typeof modelID === "string" && /fable/i.test(modelID);
+}
+
+function fableWindow(provider: ProviderInfo): WindowInfo | undefined {
+  const fromScoped = (provider.scoped ?? []).find(
+    (item) =>
+      item.label.toLowerCase() === "fable" && typeof item.percent === "number",
+  );
+  if (fromScoped) return fromScoped;
+  if (typeof provider.fable?.percent === "number") return provider.fable;
+  return undefined;
+}
+
+function preferFableWeekly(
+  provider: ProviderInfo,
+  modelID?: string,
+): WindowInfo | undefined {
+  const fable = fableWindow(provider);
+  if (!fable) return undefined;
+  if (!modelID) return fable;
+  return isFableModel(modelID) ? fable : undefined;
 }
 
 function hasUsage(provider: ProviderInfo): boolean {
@@ -135,6 +171,7 @@ export function emptySnapshot(): Snapshot {
     grok: { status: "pending" },
     go: { status: "pending" },
     anthropic: { status: "pending" },
+    meta: { status: "pending" },
   };
 }
 
@@ -175,6 +212,7 @@ export function percentTone(percent: number): "ok" | "warn" | "crit" {
 export function providerWindows(
   provider: ProviderInfo,
   labels: WindowLabels,
+  modelID?: string,
 ): WindowRow[] {
   const rows: WindowRow[] = [];
   const add = (id: WindowRow["id"], label: string, window?: WindowInfo) => {
@@ -188,14 +226,16 @@ export function providerWindows(
   };
 
   add("rolling", labels.rolling, provider.rolling);
-  add("weekly", labels.weekly, provider.weekly);
 
-  const scoped = provider.scoped ?? [];
-  for (const item of scoped) {
-    add("scoped", item.label, item);
-  }
-  if (scoped.length === 0 && typeof provider.fable?.percent === "number") {
-    add("scoped", "Fable", provider.fable);
+  const fable = preferFableWeekly(provider, modelID);
+  if (fable) {
+    add("weekly", "Fable", fable);
+  } else {
+    add("weekly", labels.weekly, provider.weekly);
+    for (const item of provider.scoped ?? []) {
+      if (item.label.toLowerCase() === "fable") continue;
+      add("scoped", item.label, item);
+    }
   }
 
   add("monthly", labels.monthly, provider.monthly);
@@ -253,42 +293,59 @@ export function resetRemaining(
   return remaining;
 }
 
-export function remainingPie(remaining: number): string {
+export function remainingBlock(remaining: number): string {
   const n = Number.isFinite(remaining) ? remaining : 0;
-  const elapsed = 1 - Math.min(1, Math.max(0, n));
-  const i = Math.round(elapsed * (PIE_CHARS.length - 1));
-  return PIE_CHARS[i];
+  const i = Math.round(Math.min(1, Math.max(0, n)) * (BLOCK_CHARS.length - 1));
+  return BLOCK_CHARS[i];
+}
+
+export function formatRemainingGlyph(
+  resetsAt: string | undefined,
+  durationMs: number,
+  now = Date.now(),
+): string {
+  if (!resetsAt || !(durationMs > 0)) return BLOCK_CHARS[0];
+  const t = Date.parse(resetsAt);
+  if (Number.isNaN(t)) return BLOCK_CHARS[0];
+  const remainingMs = t - now;
+  if (remainingMs <= 0) return BLOCK_CHARS[0];
+  if (durationMs <= DAY_MS) {
+    return remainingBlock(resetRemaining(resetsAt, durationMs, now));
+  }
+  const days = Math.floor(remainingMs / DAY_MS);
+  const dayFraction = (remainingMs % DAY_MS) / DAY_MS;
+  const glyph = remainingBlock(dayFraction);
+  return days >= 1 ? `${days}d${glyph}` : glyph;
+}
+
+function blockMinPercent(id: WindowRow["id"]): number | undefined {
+  if (id === "rolling") return HOURLY_BLOCK_MIN_PERCENT;
+  if (id === "weekly") return WEEKLY_BLOCK_MIN_PERCENT;
+  return undefined;
 }
 
 export function footerPies(
   provider: ProviderInfo,
   labels: WindowLabels,
   now = Date.now(),
+  modelID?: string,
 ): FooterPie[] {
   if (provider.status === "missing" || provider.status === "pending") return [];
   const pies: FooterPie[] = [];
-  for (const row of providerWindows(provider, labels)) {
-    if (row.percent < FOOTER_MIN_PERCENT) continue;
+  for (const row of providerWindows(provider, labels, modelID)) {
+    const minPercent = blockMinPercent(row.id);
+    if (minPercent === undefined || row.percent < minPercent) continue;
     if (!row.resetsAt || Number.isNaN(Date.parse(row.resetsAt))) continue;
     const durationMs = windowDurationMs(row, provider);
     if (!durationMs) continue;
     pies.push({
       label: row.label,
-      glyph: remainingPie(resetRemaining(row.resetsAt, durationMs, now)),
+      glyph: formatRemainingGlyph(row.resetsAt, durationMs, now),
       percent: row.percent,
+      durationMs,
     });
   }
-  return pickFooterPie(pies);
-}
-
-function pickFooterPie(pies: FooterPie[]): FooterPie[] {
-  if (pies.length <= 1) return pies;
-  const exhausted = pies.filter((p) => p.percent >= 100);
-  if (exhausted.length)
-    return [exhausted.sort((a, b) => b.percent - a.percent)[0]];
-  const used = pies.filter((p) => p.percent > 0);
-  if (used.length) return [used.sort((a, b) => b.percent - a.percent)[0]];
-  return [pies[0]];
+  return pies;
 }
 
 export function pickGoWindow(
@@ -324,18 +381,13 @@ export function pickGoWindow(
 
 export function formatWindowPercents(
   provider: ProviderInfo,
+  modelID?: string,
 ): string | undefined {
   if (provider.status === "missing" || provider.status === "pending")
     return undefined;
-  const percents = [
-    provider.rolling?.percent,
-    provider.weekly?.percent,
-    ...scopedPercents(provider),
-    provider.monthly?.percent,
-  ].filter((n): n is number => typeof n === "number");
-  if (percents.length === 0 && typeof provider.percent === "number") {
-    percents.push(provider.percent);
-  }
+  const percents = providerWindows(provider, CLAUDE_WINDOW_LABELS, modelID).map(
+    (row) => row.percent,
+  );
   if (percents.length === 0) return isFailed(provider) ? "!" : undefined;
   const text =
     percents.length === 1
@@ -359,15 +411,19 @@ export function formatCompact(snapshot: Snapshot): string {
   if (go) parts.push(go);
   const claude = chip("claude", snapshot.anthropic);
   if (claude) parts.push(claude);
+  const meta = chip("meta", snapshot.meta ?? { status: "pending" });
+  if (meta) parts.push(meta);
 
   return parts.join(" · ");
 }
 
 export function usageKindFromProviderID(
   providerID: string | undefined,
-): "grok" | "go" | "anthropic" | undefined {
+): "grok" | "go" | "anthropic" | "meta" | undefined {
   if (!providerID) return undefined;
   const id = providerID.toLowerCase();
+  if (id === "meta" || id.startsWith("meta/") || id.includes("muse"))
+    return "meta";
   if (id === "xai" || id.startsWith("xai/") || id.includes("grok"))
     return "grok";
   if (
@@ -385,29 +441,51 @@ export function usageKindFromProviderID(
   return undefined;
 }
 
-function percentsText(provider: ProviderInfo): string | undefined {
-  const text = formatWindowPercents(provider);
+function percentsText(
+  provider: ProviderInfo,
+  modelID?: string,
+): string | undefined {
+  const text = formatWindowPercents(provider, modelID);
   if (!text) return undefined;
   if (text === "!") return "!";
   return text.replace(/ \(!\)$/, "");
+}
+
+export function maxWindowPercent(
+  provider: ProviderInfo,
+  labels: WindowLabels,
+  modelID?: string,
+): number | undefined {
+  const rows = providerWindows(provider, labels, modelID);
+  if (rows.length === 0) return undefined;
+  return Math.max(...rows.map((row) => row.percent));
 }
 
 export function footerView(
   snapshot: Snapshot,
   providerID: string | undefined,
   now = Date.now(),
+  modelID?: string,
 ): FooterView | undefined {
   const kind = usageKindFromProviderID(providerID);
   if (!kind) return undefined;
   const mapped = FOOTER_KIND[kind];
-  const provider = snapshot[kind];
-  const percents = percentsText(provider);
-  if (!percents) return undefined;
+  const provider = snapshot[kind] ?? { status: "pending" };
+  const percents = percentsText(provider, modelID);
+  if (!percents) {
+    // Meta pay-as-you-go keys carry no subscription event, so there is no
+    // percent to show. Still acknowledge the active provider.
+    if (kind === "meta" && provider.status === "ok") {
+      return { name: mapped.name, percents: "payg", pies: [], failed: false };
+    }
+    return undefined;
+  }
   return {
     name: mapped.name,
     percents,
-    pies: footerPies(provider, mapped.labels, now),
+    pies: footerPies(provider, mapped.labels, now, modelID),
     failed: isFailed(provider) && percents === "!",
+    maxPercent: maxWindowPercent(provider, mapped.labels, modelID),
   };
 }
 
@@ -415,10 +493,11 @@ export function formatFooter(
   snapshot: Snapshot,
   providerID: string | undefined,
   now = Date.now(),
+  modelID?: string,
 ): string {
-  const view = footerView(snapshot, providerID, now);
+  const view = footerView(snapshot, providerID, now, modelID);
   if (!view) return "";
-  const pies = view.pies.map((pie) => pie.glyph).join(" ");
+  const pies = view.pies.map((pie) => pie.glyph).join("/");
   const usage = view.percents === "!" ? "!" : view.percents;
   const core = pies ? `${view.name} ${pies} ${usage}` : `${view.name} ${usage}`;
   return view.failed && view.percents !== "!" ? `${core} (!)` : core;
@@ -442,16 +521,22 @@ export function asSnapshot(value: unknown): Snapshot {
     grok: rec.grok,
     go: rec.go,
     anthropic: withLegacyScoped(rec.anthropic ?? { status: "pending" }),
+    meta: rec.meta ?? { status: "pending" },
   };
 }
 
-export function formatDetail(snapshot: Snapshot, now = Date.now()): string {
+export function formatDetail(
+  snapshot: Snapshot,
+  now = Date.now(),
+  modelID?: string,
+): string {
   const lines: string[] = [];
 
   const block = (
     name: string,
     provider: ProviderInfo,
     labels: WindowLabels,
+    windowModelID?: string,
   ) => {
     if (provider.status === "missing") {
       lines.push(`${name}  not connected`);
@@ -462,7 +547,7 @@ export function formatDetail(snapshot: Snapshot, now = Date.now()): string {
       provider.product && provider.product !== name
         ? `${name} ${provider.product}`
         : name;
-    for (const row of providerWindows(provider, labels)) {
+    for (const row of providerWindows(provider, labels, windowModelID)) {
       const reset = formatReset(row.resetsAt, now);
       const label = row.label ? ` ${row.label}` : "";
       lines.push(
@@ -477,7 +562,15 @@ export function formatDetail(snapshot: Snapshot, now = Date.now()): string {
 
   block("Grok", snapshot.grok, GROK_WINDOW_LABELS);
   block("OpenCode Go", snapshot.go, GO_WINDOW_LABELS);
-  block("Claude", snapshot.anthropic, CLAUDE_WINDOW_LABELS);
+  block("Claude", snapshot.anthropic, CLAUDE_WINDOW_LABELS, modelID);
+  const meta = snapshot.meta ?? { status: "pending" };
+  block("Meta", meta, META_WINDOW_LABELS);
+  if (
+    meta.status === "ok" &&
+    providerWindows(meta, META_WINDOW_LABELS).length === 0
+  ) {
+    lines.push("Meta  pay-as-you-go (see usage dashboard)");
+  }
 
   if (lines.length === 0) return "No usage data yet";
   return lines.join("\n");

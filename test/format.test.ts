@@ -8,15 +8,19 @@ import {
   formatDetail,
   formatFetchedAt,
   formatFooter,
+  formatRemainingGlyph,
   formatWindowPercents,
+  footerView,
+  isFableModel,
   GO_WINDOW_LABELS,
   GROK_WINDOW_LABELS,
+  maxWindowPercent,
   mergeProvider,
   MIN_FETCH_INTERVAL_MS,
   percentTone,
   pickGoWindow,
   providerWindows,
-  remainingPie,
+  remainingBlock,
   resetRemaining,
   usageBar,
   usageKindFromProviderID,
@@ -61,6 +65,7 @@ const snap = {
   grok,
   go,
   anthropic,
+  meta: { status: "pending" },
 };
 
 describe("parseGo / pickGoWindow", () => {
@@ -113,14 +118,38 @@ describe("parseAnthropic", () => {
       providerWindows(withFable, CLAUDE_WINDOW_LABELS)
         .map((r) => r.label)
         .join(","),
-    ).toBe("5h,week,Fable");
-    expect(formatWindowPercents(withFable)).toBe("8/28/54%");
+    ).toBe("5h,Fable");
+    expect(formatWindowPercents(withFable)).toBe("8/54%");
+    expect(formatWindowPercents(withFable, "claude-fable-5")).toBe("8/54%");
+    expect(formatWindowPercents(withFable, "claude-sonnet-4-6")).toBe("8/28%");
+    expect(
+      providerWindows(withFable, CLAUDE_WINDOW_LABELS, "claude-sonnet-4-6")
+        .map((r) => r.label)
+        .join(","),
+    ).toBe("5h,week");
     const fableSnap = { ...snap, anthropic: withFable };
-    expect(formatFooter(fableSnap, "anthropic", NOW)).toBe("claude ◔ 8/28/54%");
+    expect(
+      footerPies(withFable, CLAUDE_WINDOW_LABELS, NOW)
+        .map((p) => `${p.label}${p.glyph}`)
+        .join("/"),
+    ).toBe("Fable6d▁");
+    expect(formatFooter(fableSnap, "anthropic", NOW)).toBe("claude 6d▁ 8/54%");
+    expect(formatFooter(fableSnap, "anthropic", NOW, "claude-fable-5-1")).toBe(
+      "claude 6d▁ 8/54%",
+    );
+    expect(formatFooter(fableSnap, "anthropic", NOW, "claude-opus-4-6")).toBe(
+      "claude 8/28%",
+    );
     const fableDetail = formatDetail(fableSnap);
     expect(fableDetail).toContain("Fable");
     expect(fableDetail).toContain("54%");
-    expect(fableDetail).toContain("Claude week");
+    expect(fableDetail).not.toContain("Claude week");
+    expect(formatDetail(fableSnap, NOW, "claude-sonnet-4-6")).toContain(
+      "Claude week",
+    );
+    expect(formatDetail(fableSnap, NOW, "claude-sonnet-4-6")).not.toContain(
+      "Fable",
+    );
     const staleFable = mergeProvider(withFable, {
       status: "error",
       error: "unauthorized",
@@ -137,6 +166,12 @@ describe("parseAnthropic", () => {
     });
     expect(namedFable.scoped?.[0]?.label).toBe("Fable");
     expect(namedFable.scoped?.[0]?.percent).toBe(11);
+    expect(formatWindowPercents(namedFable)).toBe("8/11%");
+    expect(
+      providerWindows(namedFable, CLAUDE_WINDOW_LABELS)
+        .map((r) => r.label)
+        .join(","),
+    ).toBe("5h,Fable");
   });
 
   test("omits scoped without fable", () => {
@@ -160,9 +195,9 @@ describe("formatWindowPercents / formatCompact / formatFooter", () => {
   });
 
   test("footer matches current provider", () => {
-    expect(formatFooter(snap, "xai", NOW)).toBe("grok ○ 3%");
-    expect(formatFooter(snap, "opencode-go", NOW)).toBe("go ◔ 0/0/2%");
-    expect(formatFooter(snap, "anthropic", NOW)).toBe("claude ◔ 8/28%");
+    expect(formatFooter(snap, "xai", NOW)).toBe("grok 3%");
+    expect(formatFooter(snap, "opencode-go", NOW)).toBe("go 0/0/2%");
+    expect(formatFooter(snap, "anthropic", NOW)).toBe("claude 8/28%");
     expect(formatFooter(snap, "openai")).toBe("");
   });
 });
@@ -227,7 +262,7 @@ describe("mergeProvider + stale (!)", () => {
     expect(formatWindowPercents(staleClaude)).toBe("8/28%");
     expect(
       formatFooter({ ...snap, anthropic: staleClaude }, "anthropic", NOW),
-    ).toBe("claude ◔ 8/28%");
+    ).toBe("claude 8/28%");
     expect(formatDetail({ ...snap, anthropic: staleClaude })).toContain(
       "Claude 5h",
     );
@@ -252,18 +287,13 @@ describe("canFetch", () => {
   });
 });
 
-describe("remainingPie / resetRemaining / footerPies", () => {
-  test("remainingPie glyphs", () => {
-    expect(remainingPie(1)).toBe("○");
-    expect(remainingPie(0.875)).toBe("◔");
-    expect(remainingPie(0.874)).toBe("◔");
-    expect(remainingPie(0.625)).toBe("◑");
-    expect(remainingPie(0.624)).toBe("◑");
-    expect(remainingPie(0.375)).toBe("◕");
-    expect(remainingPie(0.374)).toBe("◕");
-    expect(remainingPie(0.125)).toBe("●");
-    expect(remainingPie(0.124)).toBe("●");
-    expect(remainingPie(0)).toBe("●");
+describe("remainingBlock / resetRemaining / footerPies", () => {
+  test("remainingBlock glyphs", () => {
+    expect(remainingBlock(1)).toBe("█");
+    expect(remainingBlock(0.875)).toBe("▇");
+    expect(remainingBlock(0.5)).toBe("▅");
+    expect(remainingBlock(0.125)).toBe("▂");
+    expect(remainingBlock(0)).toBe("▁");
   });
 
   test("resetRemaining", () => {
@@ -273,31 +303,96 @@ describe("remainingPie / resetRemaining / footerPies", () => {
     expect(resetRemaining(undefined, 5 * HOUR, NOW)).toBe(0);
   });
 
+  test("formatRemainingGlyph per-hour with day prefix", () => {
+    const DAY = 24 * HOUR;
+    // Rolling (short) windows keep the old fraction-of-window behavior.
+    expect(
+      formatRemainingGlyph("2026-09-01T14:00:00.000Z", 5 * HOUR, NOW),
+    ).toBe("▄");
+    // Multi-day windows: whole days + hourly glyph, prefix omitted under 1d.
+    expect(formatRemainingGlyph("2026-09-07T12:00:00.000Z", 7 * DAY, NOW)).toBe(
+      "6d▁",
+    );
+    expect(formatRemainingGlyph("2026-09-08T12:00:00.000Z", 7 * DAY, NOW)).toBe(
+      "7d▁",
+    );
+    expect(formatRemainingGlyph("2026-09-07T18:00:00.000Z", 7 * DAY, NOW)).toBe(
+      "6d▃",
+    );
+    expect(formatRemainingGlyph("2026-09-02T00:00:00.000Z", 7 * DAY, NOW)).toBe(
+      "▅",
+    );
+    expect(formatRemainingGlyph("2026-09-02T11:00:00.000Z", 7 * DAY, NOW)).toBe(
+      "█",
+    );
+    expect(formatRemainingGlyph("2026-09-01T11:00:00.000Z", 7 * DAY, NOW)).toBe(
+      "▁",
+    );
+    expect(formatRemainingGlyph(undefined, 7 * DAY, NOW)).toBe("▁");
+  });
+
   test("footer pies and failed suffix", () => {
-    const hot = {
+    const below = {
       status: "ok",
-      rolling: { percent: 62, resetsAt: "2026-09-01T14:00:00.000Z" },
-      weekly: { percent: 28, resetsAt: "2026-09-07T12:00:00.000Z" },
+      rolling: { percent: 74, resetsAt: "2026-09-01T14:00:00.000Z" },
+      weekly: { percent: 49, resetsAt: "2026-09-07T12:00:00.000Z" },
+      monthly: { percent: 81, resetsAt: "2026-09-04T12:00:00.000Z" },
+    };
+    expect(footerPies(below, CLAUDE_WINDOW_LABELS, NOW)).toEqual([]);
+    expect(formatFooter({ ...snap, anthropic: below }, "anthropic", NOW)).toBe(
+      "claude 74/49/81%",
+    );
+
+    const hourlyOnly = {
+      status: "ok",
+      rolling: { percent: 75, resetsAt: "2026-09-01T14:00:00.000Z" },
+      weekly: { percent: 49, resetsAt: "2026-09-07T12:00:00.000Z" },
+    };
+    expect(
+      footerPies(hourlyOnly, CLAUDE_WINDOW_LABELS, NOW)
+        .map((p) => `${p.label}${p.glyph}`)
+        .join("/"),
+    ).toBe("5h▄");
+    expect(
+      formatFooter({ ...snap, anthropic: hourlyOnly }, "anthropic", NOW),
+    ).toBe("claude ▄ 75/49%");
+
+    const weeklyOnly = {
+      status: "ok",
+      rolling: { percent: 74, resetsAt: "2026-09-01T17:00:00.000Z" },
+      weekly: { percent: 50, resetsAt: "2026-09-08T12:00:00.000Z" },
+    };
+    expect(
+      footerPies(weeklyOnly, CLAUDE_WINDOW_LABELS, NOW)
+        .map((p) => `${p.label}${p.glyph}`)
+        .join("/"),
+    ).toBe("week7d▁");
+
+    const both = {
+      status: "ok",
+      rolling: { percent: 80, resetsAt: "2026-09-01T14:00:00.000Z" },
+      weekly: { percent: 60, resetsAt: "2026-09-07T12:00:00.000Z" },
       monthly: { percent: 81, resetsAt: "2026-09-04T12:00:00.000Z" },
     };
     expect(
-      footerPies(hot, CLAUDE_WINDOW_LABELS, NOW)
+      footerPies(both, CLAUDE_WINDOW_LABELS, NOW)
         .map((p) => `${p.label}${p.glyph}`)
-        .join(" "),
-    ).toBe("extra●");
-    expect(formatFooter({ ...snap, anthropic: hot }, "anthropic", NOW)).toBe(
-      "claude ● 62/28/81%",
+        .join("/"),
+    ).toBe("5h▄/week6d▁");
+    expect(formatFooter({ ...snap, anthropic: both }, "anthropic", NOW)).toBe(
+      "claude ▄/6d▁ 80/60/81%",
     );
     expect(
       formatFooter(
         {
           ...snap,
-          anthropic: { ...hot, status: "error", error: "unauthorized" },
+          anthropic: { ...both, status: "error", error: "unauthorized" },
         },
         "anthropic",
         NOW,
       ),
-    ).toBe("claude ● 62/28/81%");
+    ).toBe("claude ▄/6d▁ 80/60/81%");
+
     expect(
       footerPies(
         { status: "ok", rolling: { percent: 80 } },
@@ -305,16 +400,7 @@ describe("remainingPie / resetRemaining / footerPies", () => {
         NOW,
       ).length,
     ).toBe(0);
-    const edge = {
-      status: "ok",
-      rolling: { percent: 49, resetsAt: "2026-09-01T17:00:00.000Z" },
-      weekly: { percent: 50, resetsAt: "2026-09-08T12:00:00.000Z" },
-    };
-    expect(
-      footerPies(edge, CLAUDE_WINDOW_LABELS, NOW)
-        .map((p) => `${p.label}${p.glyph}`)
-        .join(" "),
-    ).toBe("week○");
+
     const grokHot = parseGrok(200, {
       config: {
         currentPeriod: {
@@ -326,28 +412,52 @@ describe("remainingPie / resetRemaining / footerPies", () => {
       },
     });
     expect(formatFooter({ ...snap, grok: grokHot }, "xai", NOW)).toBe(
-      "grok ◔ 60%",
+      "grok 6d▁ 60%",
     );
-    const withFable = parseAnthropic(200, {
-      five_hour: { utilization: 8, resets_at: "2026-09-01T16:59:59Z" },
-      seven_day: { utilization: 28, resets_at: "2026-09-07T12:59:59Z" },
-      limits: [
-        {
-          kind: "weekly_scoped",
-          percent: 54,
-          is_active: true,
-          resets_at: "2026-09-07T12:59:59Z",
-          scope: { model: { id: null, display_name: "Fable" }, surface: null },
+    const grokCool = parseGrok(200, {
+      config: {
+        currentPeriod: {
+          type: "USAGE_PERIOD_TYPE_WEEKLY",
+          start: "2026-08-31T12:00:00.000Z",
+          end: "2026-09-07T12:00:00.000Z",
         },
-      ],
+        creditUsagePercent: 49,
+      },
     });
-    const staleHotFable = mergeProvider(withFable, {
-      status: "error",
-      error: "unauthorized",
-    });
+    expect(formatFooter({ ...snap, grok: grokCool }, "xai", NOW)).toBe(
+      "grok 49%",
+    );
+  });
+
+  test("maxWindowPercent drives low-usage dimming", () => {
+    const both = {
+      status: "ok",
+      rolling: { percent: 80, resetsAt: "2026-09-01T14:00:00.000Z" },
+      weekly: { percent: 60, resetsAt: "2026-09-07T12:00:00.000Z" },
+      monthly: { percent: 81, resetsAt: "2026-09-04T12:00:00.000Z" },
+    };
+    expect(maxWindowPercent(both, CLAUDE_WINDOW_LABELS)).toBe(81);
     expect(
-      formatFooter({ ...snap, anthropic: staleHotFable }, "anthropic", NOW),
-    ).toBe("claude ◔ 8/28/54%");
+      footerView({ ...snap, anthropic: both }, "anthropic", NOW)?.maxPercent,
+    ).toBe(81);
+
+    const low = {
+      status: "ok",
+      rolling: { percent: 8, resetsAt: "2026-09-01T14:00:00.000Z" },
+      weekly: { percent: 28, resetsAt: "2026-09-07T12:00:00.000Z" },
+    };
+    expect(maxWindowPercent(low, CLAUDE_WINDOW_LABELS)).toBe(28);
+    expect(
+      footerView({ ...snap, anthropic: low }, "anthropic", NOW)?.maxPercent,
+    ).toBe(28);
+
+    expect(
+      maxWindowPercent({ status: "error" }, CLAUDE_WINDOW_LABELS),
+    ).toBeUndefined();
+    expect(
+      footerView({ ...snap, anthropic: { status: "error" } }, "anthropic", NOW)
+        ?.maxPercent,
+    ).toBeUndefined();
   });
 });
 
@@ -356,6 +466,9 @@ describe("usageKindFromProviderID / emptySnapshot / formatDetail", () => {
     expect(usageKindFromProviderID("xai")).toBe("grok");
     expect(usageKindFromProviderID("opencode-go")).toBe("go");
     expect(usageKindFromProviderID("anthropic")).toBe("anthropic");
+    expect(isFableModel("claude-fable-5")).toBe(true);
+    expect(isFableModel("claude-fable-5-1")).toBe(true);
+    expect(isFableModel("claude-sonnet-4-6")).toBe(false);
   });
 
   test("empty snapshot", () => {

@@ -1,4 +1,5 @@
 node_modules/
 *.log
+oc-usage.jsonl
 *.tgz
 .DS_Store

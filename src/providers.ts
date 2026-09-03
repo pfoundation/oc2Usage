@@ -1,10 +1,12 @@
 import type { ProviderInfo, WindowInfo } from "./format.ts";
 
-export const USER_AGENT = "opencode-providers-usage/0.1.0";
+export const USER_AGENT = "usageTrackerWidget/0.2.0";
 export const GO_USAGE_URL = "https://opencode.ai/zen/go/v1/usage";
 export const GROK_BILLING_URL =
   "https://cli-chat-proxy.grok.com/v1/billing?format=credits";
 export const ANTHROPIC_USAGE_URL = "https://api.anthropic.com/api/oauth/usage";
+export const META_RESPONSES_URL = "https://api.meta.ai/v1/responses";
+export const META_PROBE_MODEL = "muse-spark-1.3";
 export const ANTHROPIC_OAUTH_HEADERS = {
   "anthropic-beta": "oauth-2025-04-20",
   "anthropic-version": "2023-06-01",
@@ -252,4 +254,113 @@ export function tokenFromCredential(credential: unknown): string | undefined {
   const token = asString(nested.token);
   if (token) return token;
   return undefined;
+}
+
+export function metaProbeBody(model = META_PROBE_MODEL): string {
+  return JSON.stringify({
+    model,
+    input: "ok",
+    max_output_tokens: 16,
+    reasoning: { effort: "minimal" },
+    store: false,
+    stream: true,
+  });
+}
+
+/**
+ * Scan a Responses SSE stream for the `response.subscription_usage` event
+ * (the same event Muse Code reads for `/usage`) and return its
+ * `subscription` payload: `{ tier, window: { used_percent, resets_at,
+ * window_duration_mins }, weekly: { used_percent, resets_at } }`.
+ * `resets_at` values are unix epoch seconds. Returns undefined when the
+ * stream carries no subscription event (e.g. pay-as-you-go keys).
+ */
+export function extractMetaSubscription(streamText: string): unknown {
+  for (const line of streamText.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith("data:")) continue;
+    const data = trimmed.slice("data:".length).trim();
+    if (!data || data === "[DONE]") continue;
+    let event: unknown;
+    try {
+      event = JSON.parse(data);
+    } catch {
+      continue;
+    }
+    const rec = asRecord(event);
+    if (!rec || rec.type !== "response.subscription_usage") continue;
+    if (rec.subscription !== undefined) return rec.subscription;
+  }
+  return undefined;
+}
+
+export async function fetchMetaSubscription(
+  token: string,
+  signal?: AbortSignal,
+): Promise<{ status: number; subscription: unknown }> {
+  const timeout = AbortSignal.timeout(15_000);
+  const combined = signal ? AbortSignal.any([signal, timeout]) : timeout;
+  const response = await fetch(META_RESPONSES_URL, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "text/event-stream",
+      "Content-Type": "application/json",
+      "User-Agent": USER_AGENT,
+    },
+    body: metaProbeBody(),
+    signal: combined,
+  });
+  const text = await response.text();
+  return {
+    status: response.status,
+    subscription: extractMetaSubscription(text),
+  };
+}
+
+function metaResetsAt(value: unknown): string | undefined {
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+    return new Date(value * 1000).toISOString();
+  }
+  return asString(value);
+}
+
+function metaWindow(value: unknown): WindowInfo | undefined {
+  const rec = asRecord(value);
+  if (!rec) return undefined;
+  const percent =
+    asNumber(rec.used_percent) ??
+    asNumber(rec.utilization) ??
+    asNumber(rec.percent);
+  const resetsAt = metaResetsAt(rec.resets_at ?? rec.resetsAt);
+  if (percent === undefined && !resetsAt) return undefined;
+  const window: WindowInfo = { status: "ok" };
+  if (percent !== undefined) window.percent = percent;
+  if (resetsAt) window.resetsAt = resetsAt;
+  return window;
+}
+
+export function parseMeta(status: number, body: unknown): ProviderInfo {
+  if (status === 401 || status === 403)
+    return { status: "error", error: "unauthorized" };
+  if (status === 429) return { status: "rate-limited", error: "rate limited" };
+  if (status < 200 || status >= 300) {
+    return { status: "error", error: `HTTP ${status}` };
+  }
+  const root = asRecord(body);
+  const subscription = asRecord(root?.subscription) ?? root;
+  if (!subscription) return { status: "ok" };
+  const rolling = metaWindow(subscription.window);
+  const weekly = metaWindow(subscription.weekly);
+  const picked = rolling ?? weekly;
+  if (!picked || typeof picked.percent !== "number") return { status: "ok" };
+  return {
+    status: "ok",
+    rolling,
+    weekly,
+    percent: picked.percent,
+    resetsAt: picked.resetsAt,
+    label: rolling ? "5h" : "week",
+    product: "Meta",
+  };
 }

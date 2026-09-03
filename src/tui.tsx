@@ -7,6 +7,7 @@ import {
   type Snapshot,
 } from "./format.ts";
 import { Usage } from "./rpc.ts";
+import { toSessionOptions } from "./sessions.ts";
 import { UsageChip } from "./usage-chip.tsx";
 import { UsageDialog } from "./usage-dialog.tsx";
 
@@ -36,6 +37,7 @@ export default Plugin.define({
         draft.grok = mergeProvider(draft.grok, next.grok);
         draft.go = mergeProvider(draft.go, next.go);
         draft.anthropic = mergeProvider(draft.anthropic, next.anthropic);
+        draft.meta = mergeProvider(draft.meta, next.meta);
       });
     };
 
@@ -57,6 +59,29 @@ export default Plugin.define({
       context.ui.dialog.show(() => <UsageDialog />);
     };
 
+    const showSessions = async () => {
+      const sessions = context.data.session.list() ?? [];
+      if (sessions.length === 0) {
+        context.ui.toast.show({ message: "No sessions" });
+        return;
+      }
+      const current = context.ui.router.current();
+      const currentID =
+        current.type === "session" ? current.sessionID : undefined;
+      const picked = await context.ui.dialog.select({
+        title: "Sessions",
+        placeholder: "Switch to session…",
+        options: toSessionOptions(sessions),
+        current: currentID,
+      });
+      if (!picked) return;
+      if (context.ui.tabs.enabled()) {
+        context.ui.tabs.open(picked);
+      } else {
+        context.ui.router.navigate({ type: "session", sessionID: picked });
+      }
+    };
+
     const layer = () => ({
       mode: "global" as const,
       priority: 10,
@@ -68,6 +93,14 @@ export default Plugin.define({
           palette: true as const,
           slash: { name: "usage", aliases: ["limits"] },
           run: () => void show(),
+        },
+        {
+          id: "oc.usage.sessions",
+          title: "List sessions",
+          group: "Usage",
+          bind: "ctrl+w" as const,
+          palette: true as const,
+          run: () => void showSessions(),
         },
       ],
     });

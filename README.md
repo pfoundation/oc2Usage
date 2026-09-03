@@ -5,20 +5,23 @@ OpenCode plugin that shows **provider usage limits** in the TUI footer and a `/u
 Footer examples:
 
 ```text
-claude ◔ 8/28%
-go ◔ 0/0/2%
-grok ◔ 6%
+claude 8/28%
+claude ▄/6d▅ 80/60%
+grok 6d▁ 60%
+meta 2/0%
+meta payg
 ```
 
 ## Providers
 
 The plugin reads credentials from OpenCode's own connections (`/connect`). There is no plugin config and no extra keys.
 
-| Provider    | Integration                      | Windows                                                                            |
-| ----------- | -------------------------------- | ---------------------------------------------------------------------------------- |
-| Claude      | `anthropic` (subscription OAuth) | 5h, week, per-model weekly (Fable / Sonnet / Opus when present), extra-usage month |
-| Grok        | `xai`                            | weekly credits                                                                     |
-| OpenCode Go | `opencode-go`                    | 5h, week, month                                                                    |
+| Provider    | Integration                      | Windows                                                                              |
+| ----------- | -------------------------------- | ------------------------------------------------------------------------------------ |
+| Claude      | `anthropic` (subscription OAuth) | 5h, week (Fable weekly replaces all-models week when using Fable), extra-usage month |
+| Grok        | `xai`                            | weekly credits                                                                       |
+| OpenCode Go | `opencode-go`                    | 5h, week, month                                                                      |
+| Meta        | `meta` (Model API key)           | 5h subscription prompts, week (subscription only; pay-as-you-go shows `meta payg`)   |
 
 Unconnected providers are omitted.
 
@@ -55,17 +58,28 @@ Then:
 
 ## Usage
 
-The footer chip shows **only the session's current provider**. Percents are joined with `/` in this order: 5h, week, scoped (e.g. Fable), month — e.g. `go 0/0/2%`, `claude 8/28%`.
+The footer chip shows **only the session's current provider**. Percents are joined with `/` in this order: 5h, week, month — e.g. `go 0/0/2%`, `claude 8/28%`. When the session is on Fable (or Fable weekly is present and the model is unknown), the Fable weekly cap is shown instead of the all-models week — e.g. `claude 8/54%`.
 
-A single unlabeled pie shows **time until reset** for the most-used window (`●` reset soon → `○` long wait) — e.g. `grok ◔ 6%`, `claude ◔ 8/28%`.
+Unlabeled vertical blocks show **time remaining** until reset (`█` long wait → `▁` reset soon). The 5h block appears at **≥ 75%** used; the weekly block at **≥ 50%**. If both qualify they are joined with `/` — e.g. `claude ▄/6d▅ 80/60%`. The 5h block scales to its window (about 37.5 minutes per step); multi-day blocks show whole days plus an hourly block (`6d▅` = 6 days + ~12h, bare `▅` when under a day).
 
 A failed refresh keeps the last good values. After 10 minutes without a successful fetch the chip is muted.
 
 `/usage` (alias `/limits`) force-refreshes and opens a per-provider dialog (Window / Used / Resets) with the exact fetch time. After 3 minutes, `r` refreshes from the dialog. `esc` closes it.
 
+`ctrl+w` opens a session picker (most recent first) and switches to the selected session. Remap or disable in `cli.json` — it overrides the default `input.delete.word.backward` binding:
+
+```jsonc
+{
+  "keybinds": {
+    "oc.usage.sessions": "ctrl+w",
+    // "oc.usage.sessions": false,
+  },
+}
+```
+
 ## Refresh policy
 
-Usage refreshes after each session turn, at most once every 3 minutes. Idle OpenCode does not poll. Each provider request times out after 15 seconds.
+Usage refreshes after each session turn, at most once every 3 minutes. Idle OpenCode does not poll. Each provider request times out after 15 seconds. OpenCode loads the plugin once per project; those instances share one in-flight fetch and cache so a turn is one HTTP round per process, not per project.
 
 ## Privacy
 
@@ -74,8 +88,11 @@ The plugin sends the matching connection token only to that provider's own API h
 - `https://api.anthropic.com/api/oauth/usage`
 - `https://cli-chat-proxy.grok.com/v1/billing?format=credits`
 - `https://opencode.ai/zen/go/v1/usage`
+- `https://api.meta.ai/v1/responses`
 
-Requests send `User-Agent: opencode-providers-usage/0.1.0`.
+Meta has no quota endpoint: the plugin sends a minimal streaming probe (`muse-spark-1.3`, ~25 tokens) and reads only the `response.subscription_usage` SSE event — the same event Muse Code's `/usage` reads. The completion text is discarded and the response body is never logged. On pay-as-you-go keys there is no subscription event, so the footer shows `meta payg`.
+
+Requests send `User-Agent: usageTrackerWidget/0.2.0`.
 
 The Anthropic OAuth usage endpoint and the Grok billing endpoint are undocumented and may change. This plugin is not affiliated with Anthropic, xAI, or OpenCode.
 
@@ -90,6 +107,17 @@ bun install
 bun test
 bun run typecheck
 ```
+
+Query log (JSONL), one line per snapshot get and per provider HTTP call:
+
+`~/.local/share/opencode/log/oc-usage.jsonl`
+
+```sh
+grep '"kind":"http"' ~/.local/share/opencode/log/oc-usage.jsonl | wc -l
+grep '"provider":"anthropic"' ~/.local/share/opencode/log/oc-usage.jsonl
+```
+
+Does not include tokens or successful response bodies. Delete the file anytime.
 
 There is no build step. Layout:
 

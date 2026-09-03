@@ -13,6 +13,7 @@ import {
   GROK_WINDOW_LABELS,
   isFailed,
   mergeProvider,
+  META_WINDOW_LABELS,
   percentTone,
   providerWindows,
   usageBar,
@@ -23,7 +24,7 @@ import {
 import { Usage } from "./rpc.ts";
 
 type Card = {
-  key: keyof Pick<Snapshot, "grok" | "go" | "anthropic">;
+  key: keyof Pick<Snapshot, "grok" | "go" | "anthropic" | "meta">;
   name: string;
   labels: WindowLabels;
 };
@@ -32,6 +33,7 @@ const CARDS: Card[] = [
   { key: "grok", name: "Grok", labels: GROK_WINDOW_LABELS },
   { key: "go", name: "OpenCode Go", labels: GO_WINDOW_LABELS },
   { key: "anthropic", name: "Claude", labels: CLAUDE_WINDOW_LABELS },
+  { key: "meta", name: "Meta", labels: META_WINDOW_LABELS },
 ];
 
 function readStore<T>(value: T | (() => T)): T {
@@ -79,6 +81,9 @@ export function UsageDialog() {
   const [snapshot, setSnapshot] = context.storage.memory("snapshot", {
     initial: emptySnapshot(),
   });
+  const [selection] = context.storage.memory("selection", {
+    initial: { sessionID: "", providerID: "", modelID: "" },
+  });
   const [now, setNow] = createSignal(Date.now());
   const [busy, setBusy] = createSignal(false);
   const colors = () => themeColors(context.theme);
@@ -93,6 +98,7 @@ export function UsageDialog() {
       draft.grok = mergeProvider(draft.grok, next.grok);
       draft.go = mergeProvider(draft.go, next.go);
       draft.anthropic = mergeProvider(draft.anthropic, next.anthropic);
+      draft.meta = mergeProvider(draft.meta, next.meta);
     });
   };
 
@@ -158,7 +164,14 @@ export function UsageDialog() {
       <For each={CARDS}>
         {(card) => {
           const provider = () => snap()[card.key];
-          const rows = () => providerWindows(provider(), card.labels);
+          const rows = () =>
+            providerWindows(
+              provider(),
+              card.labels,
+              card.key === "anthropic"
+                ? readStore(selection).modelID
+                : undefined,
+            );
           return (
             <box
               border
@@ -172,7 +185,11 @@ export function UsageDialog() {
               <Show
                 when={rows().length > 0}
                 fallback={
-                  <text fg={colors().muted}>{statusMessage(provider())}</text>
+                  <text fg={colors().muted}>
+                    {card.key === "meta" && provider().status === "ok"
+                      ? "pay-as-you-go (see usage dashboard)"
+                      : statusMessage(provider())}
+                  </text>
                 }
               >
                 <box flexDirection="row">

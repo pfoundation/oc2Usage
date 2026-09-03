@@ -5,20 +5,36 @@ import {
   type ProviderInfo,
   type Snapshot,
 } from "./format.ts";
+import { gatedGet, usageGate } from "./gate.ts";
+import {
+  appendUsageLog,
+  truncateBody,
+  type UsageProvider,
+  type UsageTrigger,
+} from "./log.ts";
 import {
   ANTHROPIC_OAUTH_HEADERS,
   ANTHROPIC_USAGE_URL,
   GO_USAGE_URL,
   GROK_BILLING_URL,
   fetchJson,
+  fetchMetaSubscription,
   parseAnthropic,
   parseGo,
   parseGrok,
+  parseMeta,
   tokenFromCredential,
 } from "./providers.ts";
 import { Usage } from "./rpc.ts";
 
 type Connection = Plugin.Context["integration"]["connection"];
+
+function logProvider(integrationID: string): UsageProvider {
+  if (integrationID === "xai") return "grok";
+  if (integrationID === "opencode-go") return "go";
+  if (integrationID === "meta") return "meta";
+  return "anthropic";
+}
 
 async function bearer(
   connection: Connection,
@@ -34,18 +50,99 @@ async function loadProvider(
   integrationID: string,
   url: string,
   parse: (status: number, body: unknown) => ProviderInfo,
+  trigger: UsageTrigger,
   signal?: AbortSignal,
   extraHeaders?: Record<string, string>,
 ): Promise<ProviderInfo> {
+  const started = Date.now();
+  const logHttp = (info: {
+    status: string;
+    error?: string;
+    httpStatus?: number;
+    body?: unknown;
+  }) => {
+    const failed = info.status === "error" || info.status === "rate-limited";
+    void appendUsageLog({
+      ts: new Date().toISOString(),
+      kind: "http",
+      provider: logProvider(integrationID),
+      trigger,
+      httpStatus: info.httpStatus,
+      status: info.status,
+      error: info.error,
+      ms: Date.now() - started,
+      body: failed ? truncateBody(info.body) : undefined,
+    });
+  };
+
   try {
     const token = await bearer(connection, integrationID);
-    if (!token) return { status: "missing" };
+    if (!token) {
+      logHttp({ status: "missing" });
+      return { status: "missing" };
+    }
     const { status, body } = await fetchJson(url, token, signal, extraHeaders);
-    return parse(status, body);
+    const parsed = parse(status, body);
+    logHttp({
+      status: parsed.status,
+      error: parsed.error,
+      httpStatus: status,
+      body,
+    });
+    return parsed;
   } catch (error) {
     const message = error instanceof Error ? error.message : "fetch failed";
-    if (/abort/i.test(message)) return { status: "error", error: "timeout" };
-    return { status: "error", error: message };
+    const parsed = /abort/i.test(message)
+      ? { status: "error", error: "timeout" }
+      : { status: "error", error: message };
+    logHttp(parsed);
+    return parsed;
+  }
+}
+
+async function loadMetaProvider(
+  connection: Connection,
+  trigger: UsageTrigger,
+  signal?: AbortSignal,
+): Promise<ProviderInfo> {
+  const started = Date.now();
+  const logHttp = (info: {
+    status: string;
+    error?: string;
+    httpStatus?: number;
+  }) => {
+    void appendUsageLog({
+      ts: new Date().toISOString(),
+      kind: "http",
+      provider: "meta",
+      trigger,
+      httpStatus: info.httpStatus,
+      status: info.status,
+      error: info.error,
+      ms: Date.now() - started,
+    });
+  };
+
+  try {
+    const token = await bearer(connection, "meta");
+    if (!token) {
+      logHttp({ status: "missing" });
+      return { status: "missing" };
+    }
+    // The probe is a minimal streaming Responses call (~25 tokens). Only the
+    // `response.subscription_usage` SSE event is read; the completion text is
+    // discarded. The body is never logged.
+    const { status, subscription } = await fetchMetaSubscription(token, signal);
+    const parsed = parseMeta(status, subscription);
+    logHttp({ status: parsed.status, error: parsed.error, httpStatus: status });
+    return parsed;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "fetch failed";
+    const parsed = /abort/i.test(message)
+      ? { status: "error", error: "timeout" }
+      : { status: "error", error: message };
+    logHttp(parsed);
+    return parsed;
   }
 }
 
@@ -60,34 +157,47 @@ function isTurnEnd(event: { type: string; data?: unknown }): boolean {
 
 async function setup(ctx: Plugin.Context) {
   const connection = ctx.integration.connection;
-  let cache:
-    | {
-        at: number;
-        snapshot: Snapshot;
-      }
-    | undefined;
-  let inflight: Promise<Snapshot> | undefined;
 
-  const load = async (signal?: AbortSignal): Promise<Snapshot> => {
-    const [grok, go, anthropic] = await Promise.all([
-      loadProvider(connection, "xai", GROK_BILLING_URL, parseGrok, signal),
-      loadProvider(connection, "opencode-go", GO_USAGE_URL, parseGo, signal),
+  const load = async (
+    trigger: UsageTrigger,
+    signal?: AbortSignal,
+  ): Promise<Snapshot> => {
+    const [grok, go, anthropic, meta] = await Promise.all([
+      loadProvider(
+        connection,
+        "xai",
+        GROK_BILLING_URL,
+        parseGrok,
+        trigger,
+        signal,
+      ),
+      loadProvider(
+        connection,
+        "opencode-go",
+        GO_USAGE_URL,
+        parseGo,
+        trigger,
+        signal,
+      ),
       loadProvider(
         connection,
         "anthropic",
         ANTHROPIC_USAGE_URL,
         parseAnthropic,
+        trigger,
         signal,
         ANTHROPIC_OAUTH_HEADERS,
       ),
+      loadMetaProvider(connection, trigger, signal),
     ]);
-    const prev = cache?.snapshot;
+    const prev = usageGate().snapshot;
     return JSON.parse(
       JSON.stringify({
         fetchedAt: new Date().toISOString(),
         grok: mergeProvider(prev?.grok, grok),
         go: mergeProvider(prev?.go, go),
         anthropic: mergeProvider(prev?.anthropic, anthropic),
+        meta: mergeProvider(prev?.meta, meta),
       }),
     ) as Snapshot;
   };
@@ -95,21 +205,17 @@ async function setup(ctx: Plugin.Context) {
   const getSnapshot = async (
     refresh: boolean,
     signal?: AbortSignal,
+    trigger: UsageTrigger = "rpc",
   ): Promise<Snapshot> => {
-    if (!refresh) {
-      if (inflight) return inflight;
-      if (cache && !canFetch(cache.at)) return cache.snapshot;
-    }
-
-    inflight = (async () => {
-      const snapshot = await load(signal);
-      cache = { at: Date.now(), snapshot };
-      return snapshot;
-    })().finally(() => {
-      inflight = undefined;
+    const { cached, promise } = gatedGet(refresh, () => load(trigger, signal));
+    void appendUsageLog({
+      ts: new Date().toISOString(),
+      kind: "query",
+      trigger,
+      refresh,
+      cached,
     });
-
-    return inflight;
+    return promise;
   };
 
   const registration = await ctx.rpc.register(Usage, {
@@ -117,13 +223,17 @@ async function setup(ctx: Plugin.Context) {
       const refresh = Boolean(
         (input as { refresh?: boolean } | undefined)?.refresh,
       );
-      return getSnapshot(refresh, rpcCtx.signal);
+      return getSnapshot(
+        refresh,
+        rpcCtx.signal,
+        refresh ? "rpc-refresh" : "rpc",
+      );
     },
   });
 
-  const tick = async (refresh = false) => {
+  const tick = async (refresh = false, trigger: UsageTrigger = "turn-end") => {
     try {
-      const snapshot = await getSnapshot(refresh);
+      const snapshot = await getSnapshot(refresh, undefined, trigger);
       await registration.events.emit("updated", snapshot);
     } catch (error) {
       console.error("[oc.usage] refresh failed", error);
@@ -139,7 +249,9 @@ async function setup(ctx: Plugin.Context) {
           signal: controller.signal,
         })) {
           if (!isTurnEnd(event)) continue;
-          if (cache && !canFetch(cache.at)) continue;
+          const gate = usageGate();
+          if (gate.inflight) continue;
+          if (gate.at && !canFetch(gate.at)) continue;
           void tick(false);
         }
       } catch (error) {

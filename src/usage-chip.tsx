@@ -1,11 +1,13 @@
 /** @jsxImportSource @opentui/solid */
 import { usePlugin } from "@opencode-ai/plugin/tui";
+import { TextAttributes } from "@opentui/core";
 import { For, Show, createSignal, onCleanup, onMount } from "solid-js";
 import {
   asSnapshot,
   emptySnapshot,
   footerView,
   isStale,
+  LOW_USAGE_DIM_PERCENT,
   percentTone,
 } from "./format.ts";
 
@@ -38,16 +40,23 @@ export function UsageChip(props: { sessionID?: string }) {
 
   const snap = () => asSnapshot(readStore(snapshot));
 
-  const providerID = () => {
+  const selectionForSession = () => {
     const sessionID = props.sessionID;
     if (!sessionID) return undefined;
     const sel = readStore(selection);
     const fromStore = sel.sessionID === sessionID ? sel : undefined;
     const session = context.data.session.get(sessionID);
-    return fromStore?.providerID || session?.model?.providerID || undefined;
+    return {
+      providerID:
+        fromStore?.providerID || session?.model?.providerID || undefined,
+      modelID: fromStore?.modelID || session?.model?.id || undefined,
+    };
   };
 
-  const chip = () => footerView(snap(), providerID(), now());
+  const chip = () => {
+    const sel = selectionForSession();
+    return footerView(snap(), sel?.providerID, now(), sel?.modelID);
+  };
   const muted = () => isStale(snap(), now());
 
   const colors = () => {
@@ -62,10 +71,22 @@ export function UsageChip(props: { sessionID?: string }) {
     };
   };
 
-  const nameFg = () => (muted() ? colors().muted : colors().defaultFg);
+  const nameFg = () => colors().muted;
 
-  const pieFg = (percent: number) => {
-    if (muted()) return colors().muted;
+  // fg-only dimming is invisible when the theme's muted color matches the
+  // default, so pair it with the SGR faint attribute (same `attributes`
+  // prop convention other TUI plugins use).
+  const dimAttrs = (dimmed: boolean) =>
+    dimmed ? TextAttributes.DIM : TextAttributes.NONE;
+
+  const valueDimmed = (maxPercent: number | undefined) =>
+    muted() || (maxPercent !== undefined && maxPercent < LOW_USAGE_DIM_PERCENT);
+
+  const valueFg = (maxPercent: number | undefined) =>
+    valueDimmed(maxPercent) ? colors().muted : colors().defaultFg;
+
+  const pieFg = (percent: number, maxPercent: number | undefined) => {
+    if (valueDimmed(maxPercent)) return colors().muted;
     const tone = percentTone(percent);
     const c = colors();
     if (tone === "crit") return c.crit;
@@ -77,17 +98,38 @@ export function UsageChip(props: { sessionID?: string }) {
     <Show when={chip()}>
       {(item) => (
         <box flexDirection="row" gap={1}>
-          <text fg={nameFg()} wrapMode="none">
+          <text fg={nameFg()} attributes={dimAttrs(true)} wrapMode="none">
             {item().name}
           </text>
-          <For each={item().pies}>
-            {(pie) => (
-              <text fg={pieFg(pie.percent)} wrapMode="none">
-                {pie.glyph}
-              </text>
-            )}
-          </For>
-          <text fg={nameFg()} wrapMode="none">
+          <box flexDirection="row">
+            <For each={item().pies}>
+              {(pie, i) => (
+                <box flexDirection="row">
+                  <Show when={i() > 0}>
+                    <text
+                      fg={nameFg()}
+                      attributes={dimAttrs(true)}
+                      wrapMode="none"
+                    >
+                      /
+                    </text>
+                  </Show>
+                  <text
+                    fg={pieFg(pie.percent, item().maxPercent)}
+                    attributes={dimAttrs(valueDimmed(item().maxPercent))}
+                    wrapMode="none"
+                  >
+                    {pie.glyph}
+                  </text>
+                </box>
+              )}
+            </For>
+          </box>
+          <text
+            fg={valueFg(item().maxPercent)}
+            attributes={dimAttrs(valueDimmed(item().maxPercent))}
+            wrapMode="none"
+          >
             {item().percents === "!" ? "!" : item().percents}
           </text>
           <Show when={item().failed && item().percents !== "!"}>

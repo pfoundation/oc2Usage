@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Meta (Muse Spark) subscription usage: 5h + week from the `response.subscription_usage` SSE event; `meta payg` on pay-as-you-go keys
+- JSONL query log at `~/.local/share/opencode/log/oc-usage.jsonl` (`query` + `http` lines)
+- Process-wide usage cache / inflight lock (one HTTP round per process, not per project)
+- Claude Fable weekly replaces the all-models week (footer + `/usage`) instead of showing both
+
 ## 0.1.0
 
 Initial release.
@@ -8,4 +15,4 @@ Initial release.
 - `/usage` (`/limits`) dialog with Window / Used / Resets and fetch time
 - Refresh after each session turn, at most once every 3 minutes; no idle polling
 - Failed refresh keeps last good values
-- Footer pie for time until reset on the most-used window (`●` soon → `○` long wait)
+- Footer vertical blocks for time remaining (`█` long wait → `▁` soon): 5h at ≥75% used, week at ≥50%; both joined with `/`

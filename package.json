@@ -1,7 +1,7 @@
 {
   "name": "@pfoundation/opencode-providers-usage",
   "version": "0.1.0",
-  "description": "OpenCode plugin that shows provider usage limits (Claude, Grok, OpenCode Go) in the TUI footer and a /usage dialog",
+  "description": "OpenCode plugin that shows provider usage limits (Claude, Grok, OpenCode Go, Meta) in the TUI footer and a /usage dialog",
   "type": "module",
   "license": "MIT",
   "author": "P Foundation",
