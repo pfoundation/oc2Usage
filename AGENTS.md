@@ -1,4 +1,4 @@
-# AGENTS.md — `@pfoundation/opencode-providers-usage`
+# AGENTS.md — `@pfoundation/oc2Usage`
 
 OpenCode v2 plugin: provider usage limits in the TUI footer and a `/usage` dialog.
 
@@ -58,7 +58,7 @@ Tokens come from OpenCode connections (`xai`, `opencode-go`, `anthropic`, `meta`
 
 ```jsonc
 {
-  "plugins": ["/home/ubuntu/dev/ocPluginUsage"],
+  "plugins": ["/home/ubuntu/dev/oc2Usage"],
 }
 ```
 

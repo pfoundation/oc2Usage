@@ -1,4 +1,4 @@
-# `@pfoundation/opencode-providers-usage`
+# `@pfoundation/oc2Usage`
 
 OpenCode plugin that shows **provider usage limits** in the TUI footer and a `/usage` dialog.
 
@@ -32,19 +32,19 @@ In `opencode.json`:
 ```jsonc
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugins": ["@pfoundation/opencode-providers-usage"],
+  "plugins": ["@pfoundation/oc2Usage"],
 }
 ```
 
-Pin a version with `@pfoundation/opencode-providers-usage@0.1.0` if you prefer.
+Pin a version with `@pfoundation/oc2Usage@0.1.0` if you prefer.
 
 The CLI half loads automatically through the package `./tui` export. **Do not** also add it to `cli.json`. Restart OpenCode after installing.
 
 ### Local checkout
 
 ```sh
-git clone https://github.com/pfoundation/opencode-providers-usage.git
-cd opencode-providers-usage
+git clone https://github.com/pfoundation/oc2Usage.git
+cd oc2Usage
 bun install
 ```
 
@@ -52,7 +52,7 @@ Then:
 
 ```jsonc
 {
-  "plugins": ["/absolute/path/to/opencode-providers-usage"],
+  "plugins": ["/absolute/path/to/oc2Usage"],
 }
 ```
 
@@ -130,7 +130,7 @@ There is no build step. Layout:
 Other plugins and clients can import the contract:
 
 ```ts
-import { Usage } from "@pfoundation/opencode-providers-usage/rpc";
+import { Usage } from "@pfoundation/oc2Usage/rpc";
 ```
 
 ## License

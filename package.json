@@ -1,5 +1,5 @@
 {
-  "name": "@pfoundation/opencode-providers-usage",
+  "name": "@pfoundation/oc2Usage",
   "version": "0.1.0",
   "description": "OpenCode plugin that shows provider usage limits (Claude, Grok, OpenCode Go, Meta) in the TUI footer and a /usage dialog",
   "type": "module",
@@ -7,11 +7,11 @@
   "author": "P Foundation",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/pfoundation/opencode-providers-usage.git"
+    "url": "git+https://github.com/pfoundation/oc2Usage.git"
   },
-  "homepage": "https://github.com/pfoundation/opencode-providers-usage#readme",
+  "homepage": "https://github.com/pfoundation/oc2Usage#readme",
   "bugs": {
-    "url": "https://github.com/pfoundation/opencode-providers-usage/issues"
+    "url": "https://github.com/pfoundation/oc2Usage/issues"
   },
   "keywords": [
     "opencode",
