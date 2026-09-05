@@ -12,8 +12,10 @@ import {
   GO_WINDOW_LABELS,
   GROK_WINDOW_LABELS,
   isFailed,
+  isPayg,
   mergeProvider,
   META_WINDOW_LABELS,
+  PAYG_MESSAGE,
   percentTone,
   providerWindows,
   usageBar,
@@ -186,8 +188,8 @@ export function UsageDialog() {
                 when={rows().length > 0}
                 fallback={
                   <text fg={colors().muted}>
-                    {card.key === "meta" && provider().status === "ok"
-                      ? "pay-as-you-go (see usage dashboard)"
+                    {isPayg(card.key, provider())
+                      ? PAYG_MESSAGE
                       : statusMessage(provider())}
                   </text>
                 }

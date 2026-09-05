@@ -165,6 +165,17 @@ export function mergeProvider(
   return next;
 }
 
+export const PAYG_MESSAGE = "pay-as-you-go (see usage dashboard)";
+
+/** Provider is connected and healthy but has no quota windows to report. */
+export function isPayg(
+  kind: keyof typeof FOOTER_KIND,
+  provider: ProviderInfo,
+): boolean {
+  if (kind !== "meta" && kind !== "anthropic") return false;
+  return provider.status === "ok" && !hasUsage(provider);
+}
+
 export function emptySnapshot(): Snapshot {
   return {
     fetchedAt: "",
@@ -473,9 +484,9 @@ export function footerView(
   const provider = snapshot[kind] ?? { status: "pending" };
   const percents = percentsText(provider, modelID);
   if (!percents) {
-    // Meta pay-as-you-go keys carry no subscription event, so there is no
-    // percent to show. Still acknowledge the active provider.
-    if (kind === "meta" && provider.status === "ok") {
+    // Pay-as-you-go keys (Anthropic API key, Meta without subscription) carry
+    // no quota, so there is no percent to show. Still acknowledge the provider.
+    if (isPayg(kind, provider)) {
       return { name: mapped.name, percents: "payg", pies: [], failed: false };
     }
     return undefined;
@@ -562,15 +573,12 @@ export function formatDetail(
 
   block("Grok", snapshot.grok, GROK_WINDOW_LABELS);
   block("OpenCode Go", snapshot.go, GO_WINDOW_LABELS);
-  block("Claude", snapshot.anthropic, CLAUDE_WINDOW_LABELS, modelID);
+  const anthropic = snapshot.anthropic ?? { status: "pending" };
+  block("Claude", anthropic, CLAUDE_WINDOW_LABELS, modelID);
+  if (isPayg("anthropic", anthropic)) lines.push(`Claude  ${PAYG_MESSAGE}`);
   const meta = snapshot.meta ?? { status: "pending" };
   block("Meta", meta, META_WINDOW_LABELS);
-  if (
-    meta.status === "ok" &&
-    providerWindows(meta, META_WINDOW_LABELS).length === 0
-  ) {
-    lines.push("Meta  pay-as-you-go (see usage dashboard)");
-  }
+  if (isPayg("meta", meta)) lines.push(`Meta  ${PAYG_MESSAGE}`);
 
   if (lines.length === 0) return "No usage data yet";
   return lines.join("\n");

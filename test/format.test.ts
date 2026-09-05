@@ -26,6 +26,7 @@ import {
   usageKindFromProviderID,
 } from "../src/format.ts";
 import {
+  isApiKeyCredential,
   parseAnthropic,
   parseGo,
   parseGrok,
@@ -247,6 +248,58 @@ describe("tokenFromCredential", () => {
       "sk-test",
     );
     expect(tokenFromCredential({ type: "oauth", access: "tok" })).toBe("tok");
+  });
+});
+
+describe("isApiKeyCredential", () => {
+  test("key credential is pay-as-you-go", () => {
+    expect(isApiKeyCredential({ type: "key", key: "sk-ant-api03-x" })).toBe(
+      true,
+    );
+    expect(
+      isApiKeyCredential({ value: { type: "key", key: "sk-ant-api03-x" } }),
+    ).toBe(true);
+  });
+
+  test("oauth and pasted oauth tokens are not", () => {
+    expect(isApiKeyCredential({ type: "oauth", access: "tok" })).toBe(false);
+    expect(isApiKeyCredential({ type: "key", key: "sk-ant-oat01-x" })).toBe(
+      false,
+    );
+    expect(isApiKeyCredential(undefined)).toBe(false);
+    expect(isApiKeyCredential("sk-ant-api03-x")).toBe(false);
+  });
+});
+
+describe("anthropic pay-as-you-go", () => {
+  const payg = {
+    ...emptySnapshot(),
+    anthropic: { status: "ok", product: "Claude" },
+  };
+
+  test("footer shows payg without windows", () => {
+    expect(formatFooter(payg, "anthropic", NOW)).toBe("claude payg");
+    const view = footerView(payg, "anthropic", NOW);
+    expect(view?.percents).toBe("payg");
+    expect(view?.pies).toEqual([]);
+    expect(view?.failed).toBe(false);
+  });
+
+  test("missing and pending stay hidden", () => {
+    expect(formatFooter(emptySnapshot(), "anthropic", NOW)).toBe("");
+    const missing = { ...emptySnapshot(), anthropic: { status: "missing" } };
+    expect(formatFooter(missing, "anthropic", NOW)).toBe("");
+  });
+
+  test("detail includes payg line", () => {
+    expect(formatDetail(payg, NOW)).toBe(
+      "Claude  pay-as-you-go (see usage dashboard)",
+    );
+  });
+
+  test("subscription snapshot is not payg", () => {
+    expect(formatFooter(snap, "anthropic", NOW)).not.toContain("payg");
+    expect(formatDetail(snap, NOW)).not.toContain("pay-as-you-go");
   });
 });
 

@@ -19,6 +19,7 @@ import {
   GROK_BILLING_URL,
   fetchJson,
   fetchMetaSubscription,
+  isApiKeyCredential,
   parseAnthropic,
   parseGo,
   parseGrok,
@@ -44,6 +45,9 @@ async function bearer(
   if (!active) return undefined;
   return tokenFromCredential(await connection.resolve(active));
 }
+
+/** Anthropic API keys have no subscription quota: report pay-as-you-go. */
+export const ANTHROPIC_PAYG: ProviderInfo = { status: "ok", product: "Claude" };
 
 async function loadProvider(
   connection: Connection,
@@ -76,7 +80,14 @@ async function loadProvider(
   };
 
   try {
-    const token = await bearer(connection, integrationID);
+    const active = await connection.active(integrationID);
+    const credential = active ? await connection.resolve(active) : undefined;
+    if (integrationID === "anthropic" && isApiKeyCredential(credential)) {
+      // No request is made: the OAuth usage endpoint rejects API keys.
+      logHttp({ status: "payg" });
+      return ANTHROPIC_PAYG;
+    }
+    const token = tokenFromCredential(credential);
     if (!token) {
       logHttp({ status: "missing" });
       return { status: "missing" };

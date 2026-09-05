@@ -52,7 +52,7 @@ Run `bun test` and `bun run typecheck` before committing. There is no build step
 - OpenCode Go: `https://opencode.ai/zen/go/v1/usage`
 - Meta: `POST https://api.meta.ai/v1/responses` (minimal streaming probe, reads only the `response.subscription_usage` SSE event)
 
-Tokens come from OpenCode connections (`xai`, `opencode-go`, `anthropic`, `meta`). Bump `USER_AGENT` in `src/providers.ts` with each release.
+Tokens come from OpenCode connections (`xai`, `opencode-go`, `anthropic`, `meta`). Anthropic `type: "key"` credentials skip the endpoint and report `payg` (`isApiKeyCredential` in `src/providers.ts`). Bump `USER_AGENT` in `src/providers.ts` with each release.
 
 ## Local load
 

@@ -256,6 +256,22 @@ export function tokenFromCredential(credential: unknown): string | undefined {
   return undefined;
 }
 
+/**
+ * True when the resolved credential is a plain API key (`type: "key"`), which
+ * covers both `/connect` API keys and `ANTHROPIC_API_KEY`. A pasted OAuth
+ * access token (`sk-ant-oat…`) is treated as OAuth so it still reaches the
+ * subscription usage endpoint.
+ */
+export function isApiKeyCredential(credential: unknown): boolean {
+  const rec = asRecord(credential);
+  if (!rec) return false;
+  const nested = asRecord(rec.value) ?? rec;
+  if (nested.type !== "key") return false;
+  const key = asString(nested.key);
+  if (key && /^sk-ant-oat/i.test(key)) return false;
+  return true;
+}
+
 export function metaProbeBody(model = META_PROBE_MODEL): string {
   return JSON.stringify({
     model,

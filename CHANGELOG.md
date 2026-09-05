@@ -1,7 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.2.0
 
+- Anthropic API keys show `claude payg` (footer) / "pay-as-you-go" (`/usage`) instead of `unauthorized`; the OAuth usage endpoint is no longer called for key credentials
 - Meta (Muse Spark) subscription usage: 5h + week from the `response.subscription_usage` SSE event; `meta payg` on pay-as-you-go keys
 - JSONL query log at `~/.local/share/opencode/log/oc-usage.jsonl` (`query` + `http` lines)
 - Process-wide usage cache / inflight lock (one HTTP round per process, not per project)
