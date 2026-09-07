@@ -37,7 +37,8 @@
     "src",
     "README.md",
     "LICENSE",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "docs/images/usage.png"
   ],
   "publishConfig": {
     "access": "public",

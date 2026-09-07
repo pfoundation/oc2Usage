@@ -2,6 +2,8 @@
 
 OpenCode plugin that shows **provider usage limits** in the TUI footer and a `/usage` dialog.
 
+![/usage dialog showing per-provider usage windows](docs/images/usage.png)
+
 Footer examples:
 
 ```text
