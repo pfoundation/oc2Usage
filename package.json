@@ -1,6 +1,6 @@
 {
-  "name": "@pfoundation/oc2Usage",
-  "version": "0.3.0",
+  "name": "@pfoundation/oc2usage",
+  "version": "0.3.1",
   "description": "OpenCode plugin that shows provider usage limits (Anthropic Claude, Grok, OpenCode Go, Meta, OpenAI) in the TUI footer and a /usage dialog",
   "type": "module",
   "license": "MIT",

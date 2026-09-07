@@ -1,4 +1,4 @@
-# `@pfoundation/oc2Usage`
+# `@pfoundation/oc2usage`
 
 OpenCode plugin that shows **provider usage limits** in the TUI footer and a `/usage` dialog.
 
@@ -36,11 +36,11 @@ In `opencode.json`:
 ```jsonc
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugins": ["@pfoundation/oc2Usage"],
+  "plugins": ["@pfoundation/oc2usage"],
 }
 ```
 
-Pin a version with `@pfoundation/oc2Usage@0.1.0` if you prefer.
+Pin a version with `@pfoundation/oc2usage@0.3.1` if you prefer.
 
 The CLI half loads automatically through the package `./tui` export. **Do not** also add it to `cli.json`. Restart OpenCode after installing.
 
@@ -99,7 +99,7 @@ Anthropic API keys (`/connect` key or `ANTHROPIC_API_KEY`) have no subscription 
 
 Meta has no quota endpoint: the plugin sends a minimal streaming probe (`muse-spark-1.3`, ~25 tokens) and reads only the `response.subscription_usage` SSE event — the same event Muse Code's `/usage` reads. The completion text is discarded and the response body is never logged. On pay-as-you-go keys there is no subscription event, so the footer shows `meta payg`.
 
-Requests send `User-Agent: usageTrackerWidget/0.3.0`.
+Requests send `User-Agent: usageTrackerWidget/0.3.1`.
 
 The Anthropic OAuth usage endpoint, the Grok billing endpoint, and the ChatGPT `wham/usage` endpoint are undocumented and may change. This plugin is not affiliated with Anthropic, xAI, OpenAI, Meta, or OpenCode.
 
@@ -137,7 +137,7 @@ There is no build step. Layout:
 Other plugins and clients can import the contract:
 
 ```ts
-import { Usage } from "@pfoundation/oc2Usage/rpc";
+import { Usage } from "@pfoundation/oc2usage/rpc";
 ```
 
 ## License

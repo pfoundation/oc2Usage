@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "oc-plugin-usage",
+      "name": "@pfoundation/oc2usage",
       "dependencies": {
         "@opencode-ai/plugin": "beta",
       },

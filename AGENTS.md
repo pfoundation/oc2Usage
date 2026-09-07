@@ -1,4 +1,4 @@
-# AGENTS.md — `@pfoundation/oc2Usage`
+# AGENTS.md — `@pfoundation/oc2usage`
 
 OpenCode v2 plugin: provider usage limits in the TUI footer and a `/usage` dialog.
 

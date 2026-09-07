@@ -1,7 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.3.1
 
+- Normalize the npm package name to `@pfoundation/oc2usage` (lowercase)
 - `/usage` dialog shows `Anthropic · Claude` with all reported Anthropic windows (5h, week, per-model Fable/Sonnet/Opus, extra) instead of model-filtered substitution
 - Footer chip keeps the model-aware weekly selection (`claude 8/54%` on Fable, `claude 8/28%` otherwise)
 
