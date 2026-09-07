@@ -19,13 +19,13 @@ openai payg
 
 The plugin reads credentials from OpenCode's own connections (`/connect`). There is no plugin config and no extra keys.
 
-| Provider    | Integration                         | Windows                                                                                                                                       |
-| ----------- | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| Claude      | `anthropic` (OAuth or API key)      | 5h, week (Fable weekly replaces all-models week when using Fable), extra-usage month; API keys show `claude payg`                             |
-| Grok        | `xai`                               | weekly credits                                                                                                                                |
-| OpenCode Go | `opencode-go`                       | 5h, week, month                                                                                                                               |
-| Meta        | `meta` (Model API key)              | 5h subscription prompts, week (subscription only; pay-as-you-go shows `meta payg`)                                                            |
-| OpenAI      | `openai` (ChatGPT OAuth or API key) | 5h, week Codex windows under the ChatGPT plan (classified by window length, so weekly-only plans show correctly); API keys show `openai payg` |
+| Provider    | Integration                         | Windows                                                                                                                                                                  |
+| ----------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Anthropic   | `anthropic` (OAuth or API key)      | 5h, week, per-model week (Fable/Sonnet/Opus), extra-usage month; the footer shows the session model's week while `/usage` shows all windows; API keys show `claude payg` |
+| Grok        | `xai`                               | weekly credits                                                                                                                                                           |
+| OpenCode Go | `opencode-go`                       | 5h, week, month                                                                                                                                                          |
+| Meta        | `meta` (Model API key)              | 5h subscription prompts, week (subscription only; pay-as-you-go shows `meta payg`)                                                                                       |
+| OpenAI      | `openai` (ChatGPT OAuth or API key) | 5h, week Codex windows under the ChatGPT plan (classified by window length, so weekly-only plans show correctly); API keys show `openai payg`                            |
 
 Unconnected providers are omitted.
 
@@ -62,7 +62,7 @@ Then:
 
 ## Usage
 
-The footer chip shows **only the session's current provider**. Percents are joined with `/` in this order: 5h, week, month — e.g. `go 0/0/2%`, `claude 8/28%`. When the session is on Fable (or Fable weekly is present and the model is unknown), the Fable weekly cap is shown instead of the all-models week — e.g. `claude 8/54%`.
+The footer chip shows **only the session's current provider**. Percents are joined with `/` in this order: 5h, week, month — e.g. `go 0/0/2%`, `claude 8/28%`. When the session is on Fable (or Fable weekly is present and the model is unknown), the Fable weekly cap is shown instead of the all-models week — e.g. `claude 8/54%`. The `/usage` dialog always shows all reported Anthropic windows under `Anthropic · Claude`.
 
 Unlabeled vertical blocks show **time remaining** until reset (`█` long wait → `▁` reset soon). The 5h block appears at **≥ 75%** used; the weekly block at **≥ 50%**. If both qualify they are joined with `/` — e.g. `claude ▄/6d▅ 80/60%`. The 5h block scales to its window (about 37.5 minutes per step); multi-day blocks show whole days plus an hourly block (`6d▅` = 6 days + ~12h, bare `▅` when under a day).
 

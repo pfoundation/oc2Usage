@@ -58,11 +58,14 @@ export const GO_WINDOW_LABELS: WindowLabels = {
   monthly: "month",
 };
 
-export const CLAUDE_WINDOW_LABELS: WindowLabels = {
+export const ANTHROPIC_WINDOW_LABELS: WindowLabels = {
   rolling: "5h",
   weekly: "week",
   monthly: "extra",
 };
+
+/** @deprecated Use ANTHROPIC_WINDOW_LABELS. */
+export const CLAUDE_WINDOW_LABELS: WindowLabels = ANTHROPIC_WINDOW_LABELS;
 
 export const META_WINDOW_LABELS: WindowLabels = {
   rolling: "5h",
@@ -103,7 +106,7 @@ const DAY_MS = 86_400_000;
 const FOOTER_KIND = {
   grok: { name: "grok", labels: GROK_WINDOW_LABELS },
   go: { name: "go", labels: GO_WINDOW_LABELS },
-  anthropic: { name: "claude", labels: CLAUDE_WINDOW_LABELS },
+  anthropic: { name: "claude", labels: ANTHROPIC_WINDOW_LABELS },
   meta: { name: "meta", labels: META_WINDOW_LABELS },
   openai: { name: "openai", labels: OPENAI_WINDOW_LABELS },
 } as const;
@@ -230,6 +233,12 @@ export function percentTone(percent: number): "ok" | "warn" | "crit" {
   return "ok";
 }
 
+/**
+ * Compact window selection for the footer chip: when a Fable weekly cap is
+ * reported, it replaces the all-models week for Fable sessions (or when the
+ * model is unknown). Other scoped windows are shown only when Fable is not
+ * preferred.
+ */
 export function providerWindows(
   provider: ProviderInfo,
   labels: WindowLabels,
@@ -259,6 +268,52 @@ export function providerWindows(
     }
   }
 
+  add("monthly", labels.monthly, provider.monthly);
+
+  if (rows.length === 0 && typeof provider.percent === "number") {
+    rows.push({
+      id: "percent",
+      label: provider.label ?? "",
+      percent: provider.percent,
+      resetsAt: provider.resetsAt ?? provider.periodEnd,
+    });
+  }
+  return rows;
+}
+
+/**
+ * Full window list for `/usage` detail views: overall weekly plus every
+ * reported scoped window (Fable, Sonnet, Opus, …), regardless of the session
+ * model. Legacy snapshots that carry Fable only in `provider.fable` report it
+ * once as a scoped row.
+ */
+export function providerDetailWindows(
+  provider: ProviderInfo,
+  labels: WindowLabels,
+): WindowRow[] {
+  const rows: WindowRow[] = [];
+  const add = (id: WindowRow["id"], label: string, window?: WindowInfo) => {
+    if (typeof window?.percent !== "number") return;
+    rows.push({
+      id,
+      label,
+      percent: window.percent,
+      resetsAt: window.resetsAt,
+    });
+  };
+
+  add("rolling", labels.rolling, provider.rolling);
+  add("weekly", labels.weekly, provider.weekly);
+  const seen = new Set<string>();
+  for (const item of provider.scoped ?? []) {
+    const key = item.label.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    add("scoped", item.label, item);
+  }
+  if (!seen.has("fable") && typeof provider.fable?.percent === "number") {
+    add("scoped", "Fable", provider.fable);
+  }
   add("monthly", labels.monthly, provider.monthly);
 
   if (rows.length === 0 && typeof provider.percent === "number") {
@@ -406,9 +461,11 @@ export function formatWindowPercents(
 ): string | undefined {
   if (provider.status === "missing" || provider.status === "pending")
     return undefined;
-  const percents = providerWindows(provider, CLAUDE_WINDOW_LABELS, modelID).map(
-    (row) => row.percent,
-  );
+  const percents = providerWindows(
+    provider,
+    ANTHROPIC_WINDOW_LABELS,
+    modelID,
+  ).map((row) => row.percent);
   if (percents.length === 0) return isFailed(provider) ? "!" : undefined;
   const text =
     percents.length === 1
@@ -559,13 +616,13 @@ export function formatDetail(
   now = Date.now(),
   modelID?: string,
 ): string {
+  void modelID;
   const lines: string[] = [];
 
   const block = (
     name: string,
     provider: ProviderInfo,
     labels: WindowLabels,
-    windowModelID?: string,
   ) => {
     if (provider.status === "missing") {
       lines.push(`${name}  not connected`);
@@ -576,7 +633,7 @@ export function formatDetail(
       provider.product && provider.product !== name
         ? `${name} ${provider.product}`
         : name;
-    for (const row of providerWindows(provider, labels, windowModelID)) {
+    for (const row of providerDetailWindows(provider, labels)) {
       const reset = formatReset(row.resetsAt, now);
       const label = row.label ? ` ${row.label}` : "";
       lines.push(
@@ -592,8 +649,8 @@ export function formatDetail(
   block("Grok", snapshot.grok, GROK_WINDOW_LABELS);
   block("OpenCode Go", snapshot.go, GO_WINDOW_LABELS);
   const anthropic = snapshot.anthropic ?? { status: "pending" };
-  block("Claude", anthropic, CLAUDE_WINDOW_LABELS, modelID);
-  if (isPayg("anthropic", anthropic)) lines.push(`Claude  ${PAYG_MESSAGE}`);
+  block("Anthropic", anthropic, ANTHROPIC_WINDOW_LABELS);
+  if (isPayg("anthropic", anthropic)) lines.push(`Anthropic  ${PAYG_MESSAGE}`);
   const meta = snapshot.meta ?? { status: "pending" };
   block("Meta", meta, META_WINDOW_LABELS);
   if (isPayg("meta", meta)) lines.push(`Meta  ${PAYG_MESSAGE}`);

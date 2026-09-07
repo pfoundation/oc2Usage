@@ -16,24 +16,24 @@ Run `bun test` and `bun run typecheck` before committing. There is no build step
 
 ## Layout
 
-| Path                    | Role                                             |
-| ----------------------- | ------------------------------------------------ |
-| `src/index.ts`          | Server plugin `oc.usage` (`exports` `.`)         |
-| `src/tui.tsx`           | CLI plugin `oc.usage.cli` (`exports` `./tui`)    |
-| `src/rpc.ts`            | RPC contract `ocUsage` (`exports` `./rpc`)       |
-| `src/providers.ts`      | Fetch + parse Claude / Grok / Go / Meta / OpenAI |
-| `src/format.ts`         | Pure snapshot / footer / dialog helpers          |
-| `src/log.ts`            | JSONL query/HTTP log helpers                     |
-| `src/gate.ts`           | Process-wide cache / inflight lock               |
-| `src/usage-chip.tsx`    | Footer slot                                      |
-| `src/usage-dialog.tsx`  | `/usage` dialog                                  |
-| `src/sessions.ts`       | Pure session-list helpers                        |
-| `test/format.test.ts`   | `bun:test`                                       |
-| `test/meta.test.ts`     | Meta SSE extract / parse / footer                |
-| `test/openai.test.ts`   | wham/usage parse / account id / footer           |
-| `test/sessions.test.ts` | Session-list helpers                             |
-| `test/log.test.ts`      | Query log format / path                          |
-| `test/gate.test.ts`     | Process-wide gate coalescing                     |
+| Path                    | Role                                                       |
+| ----------------------- | ---------------------------------------------------------- |
+| `src/index.ts`          | Server plugin `oc.usage` (`exports` `.`)                   |
+| `src/tui.tsx`           | CLI plugin `oc.usage.cli` (`exports` `./tui`)              |
+| `src/rpc.ts`            | RPC contract `ocUsage` (`exports` `./rpc`)                 |
+| `src/providers.ts`      | Fetch + parse Anthropic/Claude / Grok / Go / Meta / OpenAI |
+| `src/format.ts`         | Pure snapshot / footer / dialog helpers                    |
+| `src/log.ts`            | JSONL query/HTTP log helpers                               |
+| `src/gate.ts`           | Process-wide cache / inflight lock                         |
+| `src/usage-chip.tsx`    | Footer slot                                                |
+| `src/usage-dialog.tsx`  | `/usage` dialog                                            |
+| `src/sessions.ts`       | Pure session-list helpers                                  |
+| `test/format.test.ts`   | `bun:test`                                                 |
+| `test/meta.test.ts`     | Meta SSE extract / parse / footer                          |
+| `test/openai.test.ts`   | wham/usage parse / account id / footer                     |
+| `test/sessions.test.ts` | Session-list helpers                                       |
+| `test/log.test.ts`      | Query log format / path                                    |
+| `test/gate.test.ts`     | Process-wide gate coalescing                               |
 
 ## IDs
 

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   canFetch,
+  ANTHROPIC_WINDOW_LABELS,
   CLAUDE_WINDOW_LABELS,
   emptySnapshot,
   footerPies,
@@ -19,6 +20,7 @@ import {
   MIN_FETCH_INTERVAL_MS,
   percentTone,
   pickGoWindow,
+  providerDetailWindows,
   providerWindows,
   remainingBlock,
   resetRemaining,
@@ -117,7 +119,7 @@ describe("parseAnthropic", () => {
     expect(withFable.scoped?.[0]?.label).toBe("Fable");
     expect(withFable.scoped?.[0]?.percent).toBe(54);
     expect(
-      providerWindows(withFable, CLAUDE_WINDOW_LABELS)
+      providerWindows(withFable, ANTHROPIC_WINDOW_LABELS)
         .map((r) => r.label)
         .join(","),
     ).toBe("5h,Fable");
@@ -125,13 +127,13 @@ describe("parseAnthropic", () => {
     expect(formatWindowPercents(withFable, "claude-fable-5")).toBe("8/54%");
     expect(formatWindowPercents(withFable, "claude-sonnet-4-6")).toBe("8/28%");
     expect(
-      providerWindows(withFable, CLAUDE_WINDOW_LABELS, "claude-sonnet-4-6")
+      providerWindows(withFable, ANTHROPIC_WINDOW_LABELS, "claude-sonnet-4-6")
         .map((r) => r.label)
         .join(","),
     ).toBe("5h,week");
     const fableSnap = { ...snap, anthropic: withFable };
     expect(
-      footerPies(withFable, CLAUDE_WINDOW_LABELS, NOW)
+      footerPies(withFable, ANTHROPIC_WINDOW_LABELS, NOW)
         .map((p) => `${p.label}${p.glyph}`)
         .join("/"),
     ).toBe("Fable6d▁");
@@ -145,11 +147,13 @@ describe("parseAnthropic", () => {
     const fableDetail = formatDetail(fableSnap);
     expect(fableDetail).toContain("Fable");
     expect(fableDetail).toContain("54%");
-    expect(fableDetail).not.toContain("Claude week");
+    expect(fableDetail).toContain("Anthropic Claude week");
+    expect(fableDetail).toContain("28%");
+    // Detail ignores the session model: all reported windows are shown.
     expect(formatDetail(fableSnap, NOW, "claude-sonnet-4-6")).toContain(
-      "Claude week",
+      "Anthropic Claude week",
     );
-    expect(formatDetail(fableSnap, NOW, "claude-sonnet-4-6")).not.toContain(
+    expect(formatDetail(fableSnap, NOW, "claude-sonnet-4-6")).toContain(
       "Fable",
     );
     const staleFable = mergeProvider(withFable, {
@@ -170,7 +174,7 @@ describe("parseAnthropic", () => {
     expect(namedFable.scoped?.[0]?.percent).toBe(11);
     expect(formatWindowPercents(namedFable)).toBe("8/11%");
     expect(
-      providerWindows(namedFable, CLAUDE_WINDOW_LABELS)
+      providerWindows(namedFable, ANTHROPIC_WINDOW_LABELS)
         .map((r) => r.label)
         .join(","),
     ).toBe("5h,Fable");
@@ -217,10 +221,51 @@ describe("providerWindows", () => {
         .join(","),
     ).toBe("7d");
     expect(
-      providerWindows(anthropic, CLAUDE_WINDOW_LABELS)
+      providerWindows(anthropic, ANTHROPIC_WINDOW_LABELS)
         .map((r) => r.label)
         .join(","),
     ).toBe("5h,week");
+  });
+
+  test("deprecated alias matches", () => {
+    expect(CLAUDE_WINDOW_LABELS).toEqual(ANTHROPIC_WINDOW_LABELS);
+  });
+});
+
+describe("providerDetailWindows", () => {
+  test("shows week alongside all scoped windows", () => {
+    const full = parseAnthropic(200, {
+      five_hour: { utilization: 8, resets_at: "2026-09-01T16:59:59Z" },
+      seven_day: { utilization: 28, resets_at: "2026-09-07T12:59:59Z" },
+      seven_day_fable: { utilization: 54, resets_at: "2026-09-07T12:59:59Z" },
+      seven_day_sonnet: { utilization: 12, resets_at: "2026-09-07T12:59:59Z" },
+      seven_day_opus: { utilization: 33, resets_at: "2026-09-07T12:59:59Z" },
+      extra_usage: { utilization: 5, resets_at: "2026-09-30T12:59:59Z" },
+    });
+    expect(
+      providerDetailWindows(full, ANTHROPIC_WINDOW_LABELS)
+        .map((r) => r.label)
+        .join(","),
+    ).toBe("5h,week,Fable,Sonnet,Opus,extra");
+    expect(
+      providerDetailWindows(full, ANTHROPIC_WINDOW_LABELS)
+        .map((r) => Math.round(r.percent))
+        .join("/"),
+    ).toBe("8/28/54/12/33/5");
+  });
+
+  test("legacy fable without scoped reports once", () => {
+    const legacy = {
+      status: "ok",
+      rolling: { percent: 8, resetsAt: "2026-09-01T16:59:59Z" },
+      weekly: { percent: 28, resetsAt: "2026-09-07T12:59:59Z" },
+      fable: { percent: 54, resetsAt: "2026-09-07T12:59:59Z" },
+    };
+    expect(
+      providerDetailWindows(legacy, ANTHROPIC_WINDOW_LABELS)
+        .map((r) => r.label)
+        .join(","),
+    ).toBe("5h,week,Fable");
   });
 });
 
@@ -294,7 +339,7 @@ describe("anthropic pay-as-you-go", () => {
 
   test("detail includes payg line", () => {
     expect(formatDetail(payg, NOW)).toBe(
-      "Claude  pay-as-you-go (see usage dashboard)",
+      "Anthropic  pay-as-you-go (see usage dashboard)",
     );
   });
 
@@ -318,7 +363,7 @@ describe("mergeProvider + stale (!)", () => {
       formatFooter({ ...snap, anthropic: staleClaude }, "anthropic", NOW),
     ).toBe("claude 8/28%");
     expect(formatDetail({ ...snap, anthropic: staleClaude })).toContain(
-      "Claude 5h",
+      "Anthropic Claude 5h",
     );
   });
 
@@ -392,7 +437,7 @@ describe("remainingBlock / resetRemaining / footerPies", () => {
       weekly: { percent: 49, resetsAt: "2026-09-07T12:00:00.000Z" },
       monthly: { percent: 81, resetsAt: "2026-09-04T12:00:00.000Z" },
     };
-    expect(footerPies(below, CLAUDE_WINDOW_LABELS, NOW)).toEqual([]);
+    expect(footerPies(below, ANTHROPIC_WINDOW_LABELS, NOW)).toEqual([]);
     expect(formatFooter({ ...snap, anthropic: below }, "anthropic", NOW)).toBe(
       "claude 74/49/81%",
     );
@@ -403,7 +448,7 @@ describe("remainingBlock / resetRemaining / footerPies", () => {
       weekly: { percent: 49, resetsAt: "2026-09-07T12:00:00.000Z" },
     };
     expect(
-      footerPies(hourlyOnly, CLAUDE_WINDOW_LABELS, NOW)
+      footerPies(hourlyOnly, ANTHROPIC_WINDOW_LABELS, NOW)
         .map((p) => `${p.label}${p.glyph}`)
         .join("/"),
     ).toBe("5h▄");
@@ -417,7 +462,7 @@ describe("remainingBlock / resetRemaining / footerPies", () => {
       weekly: { percent: 50, resetsAt: "2026-09-08T12:00:00.000Z" },
     };
     expect(
-      footerPies(weeklyOnly, CLAUDE_WINDOW_LABELS, NOW)
+      footerPies(weeklyOnly, ANTHROPIC_WINDOW_LABELS, NOW)
         .map((p) => `${p.label}${p.glyph}`)
         .join("/"),
     ).toBe("week7d▁");
@@ -429,7 +474,7 @@ describe("remainingBlock / resetRemaining / footerPies", () => {
       monthly: { percent: 81, resetsAt: "2026-09-04T12:00:00.000Z" },
     };
     expect(
-      footerPies(both, CLAUDE_WINDOW_LABELS, NOW)
+      footerPies(both, ANTHROPIC_WINDOW_LABELS, NOW)
         .map((p) => `${p.label}${p.glyph}`)
         .join("/"),
     ).toBe("5h▄/week6d▁");
@@ -450,7 +495,7 @@ describe("remainingBlock / resetRemaining / footerPies", () => {
     expect(
       footerPies(
         { status: "ok", rolling: { percent: 80 } },
-        CLAUDE_WINDOW_LABELS,
+        ANTHROPIC_WINDOW_LABELS,
         NOW,
       ).length,
     ).toBe(0);
@@ -490,7 +535,7 @@ describe("remainingBlock / resetRemaining / footerPies", () => {
       weekly: { percent: 60, resetsAt: "2026-09-07T12:00:00.000Z" },
       monthly: { percent: 81, resetsAt: "2026-09-04T12:00:00.000Z" },
     };
-    expect(maxWindowPercent(both, CLAUDE_WINDOW_LABELS)).toBe(81);
+    expect(maxWindowPercent(both, ANTHROPIC_WINDOW_LABELS)).toBe(81);
     expect(
       footerView({ ...snap, anthropic: both }, "anthropic", NOW)?.maxPercent,
     ).toBe(81);
@@ -500,13 +545,13 @@ describe("remainingBlock / resetRemaining / footerPies", () => {
       rolling: { percent: 8, resetsAt: "2026-09-01T14:00:00.000Z" },
       weekly: { percent: 28, resetsAt: "2026-09-07T12:00:00.000Z" },
     };
-    expect(maxWindowPercent(low, CLAUDE_WINDOW_LABELS)).toBe(28);
+    expect(maxWindowPercent(low, ANTHROPIC_WINDOW_LABELS)).toBe(28);
     expect(
       footerView({ ...snap, anthropic: low }, "anthropic", NOW)?.maxPercent,
     ).toBe(28);
 
     expect(
-      maxWindowPercent({ status: "error" }, CLAUDE_WINDOW_LABELS),
+      maxWindowPercent({ status: "error" }, ANTHROPIC_WINDOW_LABELS),
     ).toBeUndefined();
     expect(
       footerView({ ...snap, anthropic: { status: "error" } }, "anthropic", NOW)

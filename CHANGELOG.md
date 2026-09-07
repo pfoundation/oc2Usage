@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- `/usage` dialog shows `Anthropic · Claude` with all reported Anthropic windows (5h, week, per-model Fable/Sonnet/Opus, extra) instead of model-filtered substitution
+- Footer chip keeps the model-aware weekly selection (`claude 8/54%` on Fable, `claude 8/28%` otherwise)
+
 ## 0.3.0
 
 - OpenAI (ChatGPT subscription) usage: 5h + week Codex windows from `GET https://chatgpt.com/backend-api/wham/usage`, classified by `limit_window_seconds` so weekly-only plans are not mislabeled; API keys show `openai payg`
