@@ -38,7 +38,8 @@
     "README.md",
     "LICENSE",
     "CHANGELOG.md",
-    "docs/images/usage.png"
+    "docs/images/usage.png",
+    "docs/images/footer-meta.png"
   ],
   "publishConfig": {
     "access": "public",

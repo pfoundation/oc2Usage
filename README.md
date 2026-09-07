@@ -6,6 +6,8 @@ OpenCode plugin that shows **provider usage limits** in the TUI footer and a `/u
 
 Footer examples:
 
+![Footer chip showing Meta usage](docs/images/footer-meta.png)
+
 ```text
 claude 8/28%
 claude ▄/6d▅ 80/60%
@@ -68,7 +70,7 @@ The footer chip shows **only the session's current provider**. Percents are join
 
 Unlabeled vertical blocks show **time remaining** until reset (`█` long wait → `▁` reset soon). The 5h block appears at **≥ 75%** used; the weekly block at **≥ 50%**. If both qualify they are joined with `/` — e.g. `claude ▄/6d▅ 80/60%`. The 5h block scales to its window (about 37.5 minutes per step); multi-day blocks show whole days plus an hourly block (`6d▅` = 6 days + ~12h, bare `▅` when under a day).
 
-A failed refresh keeps the last good values. After 10 minutes without a successful fetch the chip is muted.
+A failed refresh keeps the last good values. After 10 minutes without a successful fetch the chip is muted. Below 30% usage the chip is dimmed.
 
 `/usage` (alias `/limits`) force-refreshes and opens a per-provider dialog (Window / Used / Resets) with the exact fetch time. After 3 minutes, `r` refreshes from the dialog. `esc` closes it.
 
