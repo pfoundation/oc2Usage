@@ -30,6 +30,7 @@ export type Snapshot = {
   go: ProviderInfo;
   anthropic: ProviderInfo;
   meta: ProviderInfo;
+  openai: ProviderInfo;
 };
 
 export type WindowRow = {
@@ -69,6 +70,12 @@ export const META_WINDOW_LABELS: WindowLabels = {
   monthly: "month",
 };
 
+export const OPENAI_WINDOW_LABELS: WindowLabels = {
+  rolling: "5h",
+  weekly: "week",
+  monthly: "month",
+};
+
 export const MIN_FETCH_INTERVAL_MS = 180_000;
 export const HOURLY_BLOCK_MIN_PERCENT = 75;
 export const WEEKLY_BLOCK_MIN_PERCENT = 50;
@@ -98,6 +105,7 @@ const FOOTER_KIND = {
   go: { name: "go", labels: GO_WINDOW_LABELS },
   anthropic: { name: "claude", labels: CLAUDE_WINDOW_LABELS },
   meta: { name: "meta", labels: META_WINDOW_LABELS },
+  openai: { name: "openai", labels: OPENAI_WINDOW_LABELS },
 } as const;
 
 export function canFetch(
@@ -172,7 +180,8 @@ export function isPayg(
   kind: keyof typeof FOOTER_KIND,
   provider: ProviderInfo,
 ): boolean {
-  if (kind !== "meta" && kind !== "anthropic") return false;
+  if (kind !== "meta" && kind !== "anthropic" && kind !== "openai")
+    return false;
   return provider.status === "ok" && !hasUsage(provider);
 }
 
@@ -183,6 +192,7 @@ export function emptySnapshot(): Snapshot {
     go: { status: "pending" },
     anthropic: { status: "pending" },
     meta: { status: "pending" },
+    openai: { status: "pending" },
   };
 }
 
@@ -424,13 +434,15 @@ export function formatCompact(snapshot: Snapshot): string {
   if (claude) parts.push(claude);
   const meta = chip("meta", snapshot.meta ?? { status: "pending" });
   if (meta) parts.push(meta);
+  const openai = chip("openai", snapshot.openai ?? { status: "pending" });
+  if (openai) parts.push(openai);
 
   return parts.join(" · ");
 }
 
 export function usageKindFromProviderID(
   providerID: string | undefined,
-): "grok" | "go" | "anthropic" | "meta" | undefined {
+): "grok" | "go" | "anthropic" | "meta" | "openai" | undefined {
   if (!providerID) return undefined;
   const id = providerID.toLowerCase();
   if (id === "meta" || id.startsWith("meta/") || id.includes("muse"))
@@ -449,6 +461,10 @@ export function usageKindFromProviderID(
     id.includes("claude")
   )
     return "anthropic";
+  // Narrow: azure, openrouter, and other OpenAI-compatible providers must not
+  // show this account's ChatGPT quota.
+  if (id === "openai" || id.startsWith("openai/") || id.includes("chatgpt"))
+    return "openai";
   return undefined;
 }
 
@@ -484,8 +500,9 @@ export function footerView(
   const provider = snapshot[kind] ?? { status: "pending" };
   const percents = percentsText(provider, modelID);
   if (!percents) {
-    // Pay-as-you-go keys (Anthropic API key, Meta without subscription) carry
-    // no quota, so there is no percent to show. Still acknowledge the provider.
+    // Pay-as-you-go keys (Anthropic / OpenAI API key, Meta without
+    // subscription) carry no quota, so there is no percent to show. Still
+    // acknowledge the provider.
     if (isPayg(kind, provider)) {
       return { name: mapped.name, percents: "payg", pies: [], failed: false };
     }
@@ -533,6 +550,7 @@ export function asSnapshot(value: unknown): Snapshot {
     go: rec.go,
     anthropic: withLegacyScoped(rec.anthropic ?? { status: "pending" }),
     meta: rec.meta ?? { status: "pending" },
+    openai: rec.openai ?? { status: "pending" },
   };
 }
 
@@ -579,6 +597,9 @@ export function formatDetail(
   const meta = snapshot.meta ?? { status: "pending" };
   block("Meta", meta, META_WINDOW_LABELS);
   if (isPayg("meta", meta)) lines.push(`Meta  ${PAYG_MESSAGE}`);
+  const openai = snapshot.openai ?? { status: "pending" };
+  block("OpenAI", openai, OPENAI_WINDOW_LABELS);
+  if (isPayg("openai", openai)) lines.push(`OpenAI  ${PAYG_MESSAGE}`);
 
   if (lines.length === 0) return "No usage data yet";
   return lines.join("\n");

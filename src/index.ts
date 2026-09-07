@@ -17,13 +17,16 @@ import {
   ANTHROPIC_USAGE_URL,
   GO_USAGE_URL,
   GROK_BILLING_URL,
+  OPENAI_USAGE_URL,
   fetchJson,
   fetchMetaSubscription,
   isApiKeyCredential,
+  openAIRequestHeaders,
   parseAnthropic,
   parseGo,
   parseGrok,
   parseMeta,
+  parseOpenAI,
   tokenFromCredential,
 } from "./providers.ts";
 import { Usage } from "./rpc.ts";
@@ -34,6 +37,7 @@ function logProvider(integrationID: string): UsageProvider {
   if (integrationID === "xai") return "grok";
   if (integrationID === "opencode-go") return "go";
   if (integrationID === "meta") return "meta";
+  if (integrationID === "openai") return "openai";
   return "anthropic";
 }
 
@@ -49,6 +53,13 @@ async function bearer(
 /** Anthropic API keys have no subscription quota: report pay-as-you-go. */
 export const ANTHROPIC_PAYG: ProviderInfo = { status: "ok", product: "Claude" };
 
+/** OpenAI API keys have no ChatGPT subscription quota: report pay-as-you-go. */
+export const OPENAI_PAYG: ProviderInfo = { status: "ok", product: "ChatGPT" };
+
+type ExtraHeaders =
+  | Record<string, string>
+  | ((credential: unknown) => Record<string, string> | undefined);
+
 async function loadProvider(
   connection: Connection,
   integrationID: string,
@@ -56,7 +67,8 @@ async function loadProvider(
   parse: (status: number, body: unknown) => ProviderInfo,
   trigger: UsageTrigger,
   signal?: AbortSignal,
-  extraHeaders?: Record<string, string>,
+  extraHeaders?: ExtraHeaders,
+  payg?: ProviderInfo,
 ): Promise<ProviderInfo> {
   const started = Date.now();
   const logHttp = (info: {
@@ -82,17 +94,21 @@ async function loadProvider(
   try {
     const active = await connection.active(integrationID);
     const credential = active ? await connection.resolve(active) : undefined;
-    if (integrationID === "anthropic" && isApiKeyCredential(credential)) {
-      // No request is made: the OAuth usage endpoint rejects API keys.
+    if (payg && isApiKeyCredential(credential)) {
+      // No request is made: API keys carry no subscription quota.
       logHttp({ status: "payg" });
-      return ANTHROPIC_PAYG;
+      return payg;
     }
     const token = tokenFromCredential(credential);
     if (!token) {
       logHttp({ status: "missing" });
       return { status: "missing" };
     }
-    const { status, body } = await fetchJson(url, token, signal, extraHeaders);
+    const headers =
+      typeof extraHeaders === "function"
+        ? extraHeaders(credential)
+        : extraHeaders;
+    const { status, body } = await fetchJson(url, token, signal, headers);
     const parsed = parse(status, body);
     logHttp({
       status: parsed.status,
@@ -173,7 +189,7 @@ async function setup(ctx: Plugin.Context) {
     trigger: UsageTrigger,
     signal?: AbortSignal,
   ): Promise<Snapshot> => {
-    const [grok, go, anthropic, meta] = await Promise.all([
+    const [grok, go, anthropic, meta, openai] = await Promise.all([
       loadProvider(
         connection,
         "xai",
@@ -198,8 +214,19 @@ async function setup(ctx: Plugin.Context) {
         trigger,
         signal,
         ANTHROPIC_OAUTH_HEADERS,
+        ANTHROPIC_PAYG,
       ),
       loadMetaProvider(connection, trigger, signal),
+      loadProvider(
+        connection,
+        "openai",
+        OPENAI_USAGE_URL,
+        parseOpenAI,
+        trigger,
+        signal,
+        openAIRequestHeaders,
+        OPENAI_PAYG,
+      ),
     ]);
     const prev = usageGate().snapshot;
     return JSON.parse(
@@ -209,6 +236,7 @@ async function setup(ctx: Plugin.Context) {
         go: mergeProvider(prev?.go, go),
         anthropic: mergeProvider(prev?.anthropic, anthropic),
         meta: mergeProvider(prev?.meta, meta),
+        openai: mergeProvider(prev?.openai, openai),
       }),
     ) as Snapshot;
   };

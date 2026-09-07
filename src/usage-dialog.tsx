@@ -15,6 +15,7 @@ import {
   isPayg,
   mergeProvider,
   META_WINDOW_LABELS,
+  OPENAI_WINDOW_LABELS,
   PAYG_MESSAGE,
   percentTone,
   providerWindows,
@@ -26,7 +27,7 @@ import {
 import { Usage } from "./rpc.ts";
 
 type Card = {
-  key: keyof Pick<Snapshot, "grok" | "go" | "anthropic" | "meta">;
+  key: keyof Pick<Snapshot, "grok" | "go" | "anthropic" | "meta" | "openai">;
   name: string;
   labels: WindowLabels;
 };
@@ -36,6 +37,7 @@ const CARDS: Card[] = [
   { key: "go", name: "OpenCode Go", labels: GO_WINDOW_LABELS },
   { key: "anthropic", name: "Claude", labels: CLAUDE_WINDOW_LABELS },
   { key: "meta", name: "Meta", labels: META_WINDOW_LABELS },
+  { key: "openai", name: "OpenAI", labels: OPENAI_WINDOW_LABELS },
 ];
 
 function readStore<T>(value: T | (() => T)): T {
@@ -101,6 +103,7 @@ export function UsageDialog() {
       draft.go = mergeProvider(draft.go, next.go);
       draft.anthropic = mergeProvider(draft.anthropic, next.anthropic);
       draft.meta = mergeProvider(draft.meta, next.meta);
+      draft.openai = mergeProvider(draft.openai, next.openai);
     });
   };
 

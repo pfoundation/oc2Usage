@@ -67,6 +67,7 @@ const snap = {
   go,
   anthropic,
   meta: { status: "pending" },
+  openai: { status: "pending" },
 };
 
 describe("parseGo / pickGoWindow", () => {

@@ -51,8 +51,9 @@ const snapshotSchema = {
     go: providerSchema,
     anthropic: providerSchema,
     meta: providerSchema,
+    openai: providerSchema,
   },
-  required: ["fetchedAt", "grok", "go", "anthropic", "meta"],
+  required: ["fetchedAt", "grok", "go", "anthropic", "meta", "openai"],
   additionalProperties: false,
 } as const;
 

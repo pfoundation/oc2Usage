@@ -38,6 +38,7 @@ export default Plugin.define({
         draft.go = mergeProvider(draft.go, next.go);
         draft.anthropic = mergeProvider(draft.anthropic, next.anthropic);
         draft.meta = mergeProvider(draft.meta, next.meta);
+        draft.openai = mergeProvider(draft.openai, next.openai);
       });
     };
 

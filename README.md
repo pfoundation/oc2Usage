@@ -11,18 +11,21 @@ claude payg
 grok 6d▁ 60%
 meta 2/0%
 meta payg
+openai 12/38%
+openai payg
 ```
 
 ## Providers
 
 The plugin reads credentials from OpenCode's own connections (`/connect`). There is no plugin config and no extra keys.
 
-| Provider    | Integration                    | Windows                                                                                                           |
-| ----------- | ------------------------------ | ----------------------------------------------------------------------------------------------------------------- |
-| Claude      | `anthropic` (OAuth or API key) | 5h, week (Fable weekly replaces all-models week when using Fable), extra-usage month; API keys show `claude payg` |
-| Grok        | `xai`                          | weekly credits                                                                                                    |
-| OpenCode Go | `opencode-go`                  | 5h, week, month                                                                                                   |
-| Meta        | `meta` (Model API key)         | 5h subscription prompts, week (subscription only; pay-as-you-go shows `meta payg`)                                |
+| Provider    | Integration                         | Windows                                                                                                                                       |
+| ----------- | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Claude      | `anthropic` (OAuth or API key)      | 5h, week (Fable weekly replaces all-models week when using Fable), extra-usage month; API keys show `claude payg`                             |
+| Grok        | `xai`                               | weekly credits                                                                                                                                |
+| OpenCode Go | `opencode-go`                       | 5h, week, month                                                                                                                               |
+| Meta        | `meta` (Model API key)              | 5h subscription prompts, week (subscription only; pay-as-you-go shows `meta payg`)                                                            |
+| OpenAI      | `openai` (ChatGPT OAuth or API key) | 5h, week Codex windows under the ChatGPT plan (classified by window length, so weekly-only plans show correctly); API keys show `openai payg` |
 
 Unconnected providers are omitted.
 
@@ -90,14 +93,15 @@ The plugin sends the matching connection token only to that provider's own API h
 - `https://cli-chat-proxy.grok.com/v1/billing?format=credits`
 - `https://opencode.ai/zen/go/v1/usage`
 - `https://api.meta.ai/v1/responses`
+- `https://chatgpt.com/backend-api/wham/usage`
 
-Anthropic API keys (`/connect` key or `ANTHROPIC_API_KEY`) have no subscription quota, so no request is made and the footer shows `claude payg`.
+Anthropic API keys (`/connect` key or `ANTHROPIC_API_KEY`) have no subscription quota, so no request is made and the footer shows `claude payg`. OpenAI API keys likewise skip the ChatGPT usage endpoint and show `openai payg`; pasted ChatGPT JWT access tokens are treated as OAuth.
 
 Meta has no quota endpoint: the plugin sends a minimal streaming probe (`muse-spark-1.3`, ~25 tokens) and reads only the `response.subscription_usage` SSE event — the same event Muse Code's `/usage` reads. The completion text is discarded and the response body is never logged. On pay-as-you-go keys there is no subscription event, so the footer shows `meta payg`.
 
-Requests send `User-Agent: usageTrackerWidget/0.2.0`.
+Requests send `User-Agent: usageTrackerWidget/0.3.0`.
 
-The Anthropic OAuth usage endpoint and the Grok billing endpoint are undocumented and may change. This plugin is not affiliated with Anthropic, xAI, or OpenCode.
+The Anthropic OAuth usage endpoint, the Grok billing endpoint, and the ChatGPT `wham/usage` endpoint are undocumented and may change. This plugin is not affiliated with Anthropic, xAI, OpenAI, Meta, or OpenCode.
 
 ## Compatibility
 

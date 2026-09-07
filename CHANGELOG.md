@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.0
+
+- OpenAI (ChatGPT subscription) usage: 5h + week Codex windows from `GET https://chatgpt.com/backend-api/wham/usage`, classified by `limit_window_seconds` so weekly-only plans are not mislabeled; API keys show `openai payg`
+- Pasted ChatGPT JWT access tokens are treated as OAuth, not API keys
+
 ## 0.2.0
 
 - Anthropic API keys show `claude payg` (footer) / "pay-as-you-go" (`/usage`) instead of `unauthorized`; the OAuth usage endpoint is no longer called for key credentials
