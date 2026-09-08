@@ -1,5 +1,14 @@
 # Changelog
 
+## 26.9.0
+
+- chore: trim keywords, automate releases via workflow_dispatch (#1) (86a6615)
+- docs: add Meta footer chip screenshot to README (40532eb)
+- docs: add /usage dialog screenshot to README (3dca2aa)
+- chore: normalize package name to @pfoundation/oc2usage for the 0.3.1 release (825b764)
+- feat: /usage dialog shows all Anthropic windows under Anthropic · Claude (a715da7)
+- feat: OpenAI subscription usage with 5h/week Codex windows and openai payg (992113d)
+
 ## 0.3.1
 
 - Normalize the npm package name to `@pfoundation/oc2usage` (lowercase)
