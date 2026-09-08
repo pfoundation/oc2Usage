@@ -15,18 +15,7 @@
   },
   "keywords": [
     "opencode",
-    "opencode-plugin",
-    "usage",
-    "rate-limit",
-    "quota",
-    "anthropic",
-    "claude",
-    "grok",
-    "xai",
-    "opencode-go",
-    "openai",
-    "chatgpt",
-    "codex"
+    "opencode-plugin"
   ],
   "exports": {
     ".": "./src/index.ts",
