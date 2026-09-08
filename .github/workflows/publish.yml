@@ -3,6 +3,12 @@ name: publish
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to publish (e.g. v26.9.0)"
+        required: true
+        type: string
 
 jobs:
   publish:
@@ -12,6 +18,8 @@ jobs:
       id-token: write # Required for npm trusted publishing (OIDC)
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.tag || github.ref }}
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.8
