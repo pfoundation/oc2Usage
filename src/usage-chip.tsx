@@ -1,5 +1,5 @@
 /** @jsxImportSource @opentui/solid */
-import { usePlugin } from "@opencode-ai/plugin/tui";
+import { usePlugin } from "@opencode/plugin/tui";
 import { TextAttributes } from "@opentui/core";
 import { For, Show, createSignal, onCleanup, onMount } from "solid-js";
 import {
