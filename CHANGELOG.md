@@ -1,5 +1,10 @@
 # Changelog
 
+## 26.9.1
+
+- fix: sync package version from tag before npm publish (4b66297)
+- chore: update plugin SDK to @opencode/plugin (ffac87b)
+
 ## 26.9.0
 
 - chore: trim keywords, automate releases via workflow_dispatch (#1) (86a6615)

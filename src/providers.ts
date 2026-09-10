@@ -1,6 +1,6 @@
 import type { ProviderInfo, WindowInfo } from "./format.ts";
 
-export const USER_AGENT = "usageTrackerWidget/26.9.0";
+export const USER_AGENT = "usageTrackerWidget/26.9.1";
 export const GO_USAGE_URL = "https://opencode.ai/zen/go/v1/usage";
 export const GROK_BILLING_URL =
   "https://cli-chat-proxy.grok.com/v1/billing?format=credits";
